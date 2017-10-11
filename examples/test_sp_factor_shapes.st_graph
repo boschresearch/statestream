@@ -1,0 +1,234 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: test_sp_factor_shapes
+agents: 128
+neuron_pools:
+    image:
+        shape: [1, 28, 28]
+        tags: [sensor]
+    label:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    full_full:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    full_feature:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    full_spatial:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    full_scalar:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    feature_feature:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    feature_spatial:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    feature_scalar:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    spatial_spatial:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    spatial_scalar:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    scalar_scalar:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    pred:
+        shape: [10, 1, 1]
+        tag: [prediction]
+synapse_pools:
+    sp_full_full:
+        source:
+        - [image]
+        - [image]
+        target: full_full
+        factor_shapes: [full, full]
+        rf:
+        - [5]
+        - [3]
+    sp_full_feature:
+        source:
+        - [image]
+        - [image]
+        target: full_feature
+        factor_shapes: [full, feature]
+        rf:
+        - [5]
+        - [0]
+    sp_full_spatial:
+        source:
+        - [image]
+        - [image]
+        target: full_spatial
+        factor_shapes: [full, spatial]
+        rf:
+        - [5]
+        - [3]
+    sp_full_scalar:
+        source:
+        - [image]
+        - [image]
+        target: full_scalar
+        factor_shapes: [full, scalar]
+        rf:
+        - [5]
+        - [0]
+    sp_feature_feature:
+        source:
+        - [image]
+        - [image]
+        target: feature_feature
+        factor_shapes: [feature, feature]
+        rf:
+        - [0]
+        - [0]
+    sp_feature_spatial:
+        source:
+        - [image]
+        - [image]
+        target: feature_spatial
+        factor_shapes: [feature, spatial]
+        rf:
+        - [0]
+        - [3]
+    sp_feature_scalar:
+        source:
+        - [image]
+        - [image]
+        target: feature_scalar
+        factor_shapes: [feature, scalar]
+        rf:
+        - [0]
+        - [0]
+    sp_spatial_spatial:
+        source:
+        - [image]
+        - [image]
+        target: spatial_spatial
+        factor_shapes: [spatial, spatial]
+        rf:
+        - [3]
+        - [5]
+    sp_spatial_scalar:
+        source:
+        - [image]
+        - [image]
+        target: spatial_scalar
+        factor_shapes: [spatial, scalar]
+        rf:
+        - [3]
+        - [0]
+    sp_scalar_scalar:
+        source:
+        - [image]
+        - [image]
+        target: scalar_scalar
+        factor_shapes: [scalar, scalar]
+        rf:
+        - [0]
+        - [0]
+    pred_full_full:
+        source:
+        - [full_full]
+        target: pred
+    pred_full_feature:
+        source:
+        - [full_feature]
+        target: pred
+    pred_full_spatial:
+        source:
+        - [full_spatial]
+        target: pred
+    pred_full_scalar:
+        source:
+        - [full_scalar]
+        target: pred
+    pred_feature_feature:
+        source:
+        - [feature_feature]
+        target: pred
+    pred_feature_spatial:
+        source:
+        - [feature_spatial]
+        target: pred
+    pred_feature_scalar:
+        source:
+        - [feature_scalar]
+        target: pred
+    pred_spatial_spatial:
+        source:
+        - [spatial_spatial]
+        target: pred
+    pred_spatial_scalar:
+        source:
+        - [spatial_scalar]
+        target: pred
+    pred_scalar_scalar:
+        source:
+        - [scalar_scalar]
+        target: pred
+plasticities:
+    loss_c1:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-8
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, sp_full_full, W_0_0]
+        - [sp, sp_full_full, W_1_0]
+        - [sp, sp_full_feature, W_0_0]
+        - [sp, sp_full_feature, W_1_0]
+        - [sp, sp_full_spatial, W_0_0]
+        - [sp, sp_full_spatial, W_1_0]
+        - [sp, sp_full_scalar, W_0_0]
+        - [sp, sp_full_scalar, W_1_0]
+        - [sp, sp_feature_feature, W_0_0]
+        - [sp, sp_feature_feature, W_1_0]
+        - [sp, sp_feature_spatial, W_0_0]
+        - [sp, sp_feature_spatial, W_1_0]
+        - [sp, sp_feature_scalar, W_0_0]
+        - [sp, sp_feature_scalar, W_1_0]
+        - [sp, sp_spatial_spatial, W_0_0]
+        - [sp, sp_spatial_spatial, W_1_0]
+        - [sp, sp_spatial_scalar, W_0_0]
+        - [sp, sp_spatial_scalar, W_1_0]
+        - [sp, sp_scalar_scalar, W_0_0]
+        - [sp, sp_scalar_scalar, W_1_0]
+interfaces:
+    mnist_small:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: image
+            mnist_label: label
+            mnist_pred: pred
+        source_file: /opt/dl/data/mnist.pkl.gz

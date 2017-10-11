@@ -1,0 +1,157 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# This specifies two small similar network for cifar-10 classification.
+# These networks (A, B) can be used to compare certain network differences.
+# Dataset required: 
+#     * cifar-10 (see interfaces/process_if_cifar10.py)
+
+
+name: cifar10_small_comparison
+agents: 64
+tag_specs:
+    np_A:
+        act: relu
+    np_B:
+        act: relu
+    sp_A:
+        init W_0_0: xavier
+    sp_B:
+        init W_0_0: xavier_4.0
+modules:
+    cf10_net:
+        neuron_pools:
+            image:
+                shape: [3, 32, 32]
+                tags: [sensor]
+            label:
+                shape: [10, 1, 1]
+                tags: [sensor]
+            conv1_1:
+                shape: [32, 32, 32]
+                tags: [conv1, _my_np_tag]
+            conv1_2:
+                shape: [32, 16, 16]
+                tags: [conv1, _my_np_tag]
+                dropout: 0.25
+                device: cuda0
+            conv2_1:
+                shape: [64, 16, 16]
+                tags: [conv2, _my_np_tag]
+                device: cuda0
+            conv2_2:
+                shape: [64, 8, 8]
+                tags: [conv2, _my_np_tag]
+                dropout: 0.25
+                device: cuda0
+            dense:
+                shape: [512, 1, 1]
+                tags: [dense, _my_np_tag]
+                act: relu
+                dropout: 0.5
+                device: cuda0
+            prediction:
+                shape: [10, 1, 1]
+                tags: [prediction]
+                act: softmax
+        synapse_pools:
+            ret_c11:
+                source:
+                - [image]
+                target: conv1_1
+                rf: 3
+                tags: [_my_sp_tag]
+            c11_c12:
+                source:
+                - [conv1_1]
+                target: conv1_2
+                rf: 3
+                tags: [_my_sp_tag]
+            c12_c21:
+                source:
+                - [conv1_2]
+                target: conv2_1
+                rf: 3
+                tags: [_my_sp_tag]
+            c21_c22:
+                source:
+                - [conv2_1]
+                target: conv2_2
+                rf: 3
+                tags: [_my_sp_tag]
+            c22_d:
+                source:
+                - [conv2_2]
+                target: dense
+                tags: [_my_sp_tag]
+            d_pred:
+                source:
+                - [dense]
+                target: prediction
+        plasticities:
+            loss:
+                type: loss
+                loss_function: _my_loss_fcn
+                device: cuda0
+                source: prediction
+                source_t: 6
+                target: label
+                target_t: 0
+                optimizer: rmsprop
+                lr: 1e-4
+                rho: 0.9
+                tags: [_my_plast_tag]
+                parameter:
+                - [sp, d_pred, W_0_0]
+                - [sp, c22_d, W_0_0]
+                - [sp, c21_c22, W_0_0]
+                - [sp, c12_c21, W_0_0]
+                - [sp, c11_c12, W_0_0]
+                - [sp, ret_c11, W_0_0]
+                - [np, conv1_1, b]
+                - [np, conv1_2, b]
+                - [np, conv2_1, b]
+                - [np, conv2_2, b]
+                - [np, dense, b]
+        interfaces:
+            cf10:
+                type: cifar10
+                in: [cf10_pred]
+                out: [cf10_image, cf10_label]
+                remap:
+                    cf10_pred: prediction
+                    cf10_image: image
+                    cf10_label: label
+                source_path: /opt/dl/data/cifar10/cifar-10-batches-py/
+                fading: 0
+                min_duration: 8
+                max_duration: 12
+cf10_net:
+    A:
+        my_np_tag: np_A
+        my_sp_tag: sp_A
+        my_plast_tag: plast_A
+        my_loss_fcn: negloglikelihood
+    B:
+        my_np_tag: np_B
+        my_sp_tag: sp_B
+        my_plast_tag: plast_B
+        my_loss_fcn: categorical_crossentropy
+neuron_pools: {}
+synapse_pools: {}
+plasticities: {}
+interfaces: {}

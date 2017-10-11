@@ -1,0 +1,198 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: test_np_bias_shape
+agents: 128
+neuron_pools:
+    image:
+        shape: [1, 28, 28]
+        tags: [sensor]
+    label:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    c1_full:
+        shape: [16, 14, 14]
+        bias_shape: full
+        tags: [hidden]
+    c1_spatial:
+        shape: [16, 14, 14]
+        bias_shape: spatial
+        tags: [hidden]
+    c1_feature:
+        shape: [16, 14, 14]
+        bias_shape: feature
+        tags: [hidden]
+    c1_scalar:
+        shape: [16, 14, 14]
+        bias_shape: scalar
+        tags: [hidden]
+    c1_None:
+        shape: [16, 14, 14]
+        bias_shape: False
+        tags: [hidden]
+    pred_full:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    pred_feature:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    pred_spatial:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    pred_scalar:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    pred_None:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+synapse_pools:
+    img_full:
+        source:
+        - [image]
+        target: c1_full
+        rf: 5
+    img_feature:
+        source:
+        - [image]
+        target: c1_feature
+        rf: 5
+    img_spatial:
+        source:
+        - [image]
+        target: c1_spatial
+        rf: 5
+    img_scalar:
+        source:
+        - [image]
+        target: c1_scalar
+        rf: 5
+    img_None:
+        source:
+        - [image]
+        target: c1_None
+        rf: 5
+    full_pred:
+        source:
+        - [c1_full]
+        target: pred_full
+    feature_pred:
+        source:
+        - [c1_feature]
+        target: pred_feature
+    spatial_pred:
+        source:
+        - [c1_spatial]
+        target: pred_spatial
+    scalar_pred:
+        source:
+        - [c1_scalar]
+        target: pred_scalar
+    None_pred:
+        source:
+        - [c1_None]
+        target: pred_None
+plasticities:
+    loss_full:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred_full
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_full, W_0_0]
+        - [np, c1_full, b]
+        - [sp, full_pred, W_0_0]
+    loss_feature:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred_feature
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_feature, W_0_0]
+        - [np, c1_feature, b]
+        - [sp, feature_pred, W_0_0]
+    loss_spatial:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred_spatial
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_spatial, W_0_0]
+        - [np, c1_spatial, b]
+        - [sp, spatial_pred, W_0_0]
+    loss_scalar:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred_scalar
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_scalar, W_0_0]
+        - [np, c1_scalar, b]
+        - [sp, scalar_pred, W_0_0]
+    loss_None:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred_None
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_None, W_0_0]
+        - [sp, None_pred, W_0_0]
+interfaces:
+    mnist_small:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: image
+            mnist_label: label
+            mnist_pred: pred_full
+        source_file: /opt/dl/data/mnist.pkl.gz

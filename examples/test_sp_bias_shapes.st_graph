@@ -1,0 +1,337 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: test_sp_bias_shapes
+agents: 128
+neuron_pools:
+    image:
+        shape: [1, 28, 28]
+        tags: [sensor]
+    label:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    c1:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    c2:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    c3:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    c4:
+        shape: [16, 14, 14]
+        tags: [hidden]
+    pred1:
+        shape: [10, 1, 1]
+        tag: [prediction]
+    pred2:
+        shape: [10, 1, 1]
+        tag: [prediction]
+    pred3:
+        shape: [10, 1, 1]
+        tag: [prediction]
+    pred4:
+        shape: [10, 1, 1]
+        tag: [prediction]
+synapse_pools:
+    img_c1_full:
+        source:
+        - [image]
+        target: c1
+        bias_shapes: [full]
+        rf: 5
+    img_c1_feature:
+        source:
+        - [image]
+        target: c1
+        bias_shapes: [feature]
+        rf: 5
+    img_c1_spatial:
+        source:
+        - [image]
+        target: c1
+        bias_shapes: [spatial]
+        rf: 5
+    img_c1_scalar:
+        source:
+        - [image]
+        target: c1
+        bias_shapes: [scalar]
+        rf: 5
+    img_c2_full:
+        source:
+        - [image, c2]
+        target: c2
+        bias_shapes: [full]
+        rf: 
+        - [3, 3]
+    img_c2_feature:
+        source:
+        - [image, c2]
+        target: c2
+        bias_shapes: [feature]
+        rf:
+        - [3, 3]
+    img_c2_spatial:
+        source:
+        - [image, c2]
+        target: c2
+        bias_shapes: [spatial]
+        rf:
+        - [3, 3]
+    img_c2_scalar:
+        source:
+        - [image, c2]
+        target: c2
+        bias_shapes: [scalar]
+        rf:
+        - [3, 3]
+    img_c3_1:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [full, full]
+        rf:
+        - [3]
+        - [3]
+    img_c3_2:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [full, spatial]
+        rf:
+        - [3]
+        - [3]
+    img_c3_3:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [full, feature]
+        rf:
+        - [3]
+        - [3]
+    img_c3_4:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [full, scalar]
+        rf:
+        - [3]
+        - [3]
+    img_c3_5:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [feature, feature]
+        rf:
+        - [3]
+        - [3]
+    img_c3_6:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [feature, spatial]
+        rf:
+        - [3]
+        - [3]
+    img_c3_7:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [feature, scalar]
+        rf:
+        - [3]
+        - [3]
+    img_c3_8:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [spatial, spatial]
+        rf:
+        - [3]
+        - [3]
+    img_c3_9:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [spatial, scalar]
+        rf:
+        - [3]
+        - [3]
+    img_c3_10:
+        source:
+        - [image]
+        - [c3]
+        target: c3
+        bias_shapes: [scalar, scalar]
+        rf:
+        - [3]
+        - [3]
+    img_c4_1:
+        source:
+        - [image]
+        - [c4]
+        target: c4
+        bias_shapes: [full, None]
+        rf:
+        - [3]
+        - [3]
+    img_c4_2:
+        source:
+        - [image]
+        - [c4]
+        target: c4
+        bias_shapes: [feature, None]
+        rf:
+        - [3]
+        - [3]
+    img_c4_3:
+        source:
+        - [image]
+        - [c4]
+        target: c4
+        bias_shapes: [spatial, None]
+        rf:
+        - [3]
+        - [3]
+    img_c4_4:
+        source:
+        - [image]
+        - [c4]
+        target: c4
+        bias_shapes: [scalar, None]
+        rf:
+        - [3]
+        - [3]
+    c1_pred:
+        source:
+        - [c1]
+        target: pred1
+    c2_pred:
+        source:
+        - [c2]
+        target: pred2
+    c3_pred:
+        source:
+        - [c3]
+        target: pred3
+    c4_pred:
+        source:
+        - [c4]
+        target: pred4
+plasticities:
+    loss_c1:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred1
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-8
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_c1_full, b_0]
+        - [sp, img_c1_feature, b_0]
+        - [sp, img_c1_spatial, b_0]
+        - [sp, img_c1_scalar, b_0]
+    loss_c2:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred2
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-8
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_c2_full, b_0]
+        - [sp, img_c2_feature, b_0]
+        - [sp, img_c2_spatial, b_0]
+        - [sp, img_c2_scalar, b_0]
+    loss_c3:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred3
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-8
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_c3_1, b_0]
+        - [sp, img_c3_1, b_1]
+        - [sp, img_c3_2, b_0]
+        - [sp, img_c3_2, b_1]
+        - [sp, img_c3_3, b_0]
+        - [sp, img_c3_3, b_1]
+        - [sp, img_c3_4, b_0]
+        - [sp, img_c3_4, b_1]
+        - [sp, img_c3_5, b_0]
+        - [sp, img_c3_5, b_1]
+        - [sp, img_c3_6, b_0]
+        - [sp, img_c3_6, b_1]
+        - [sp, img_c3_7, b_0]
+        - [sp, img_c3_7, b_1]
+        - [sp, img_c3_8, b_0]
+        - [sp, img_c3_8, b_1]
+        - [sp, img_c3_9, b_0]
+        - [sp, img_c3_9, b_1]
+        - [sp, img_c3_10, b_0]
+        - [sp, img_c3_10, b_1]
+    loss_c4:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred4
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-8
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_c4_1, b_0]
+        - [sp, img_c4_2, b_0]
+        - [sp, img_c4_3, b_0]
+        - [sp, img_c4_4, b_0]
+interfaces:
+    mnist_small:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: image
+            mnist_label: label
+            mnist_pred: pred1
+        source_file: /opt/dl/data/mnist.pkl.gz

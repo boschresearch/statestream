@@ -1,0 +1,77 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# An example to test / illustrate some weight initializations.
+# Dataset required: 
+#     None
+
+
+name: test_sp_weight_init
+agents: 8
+neuron_pools:
+    np1:
+        shape: [16, 32, 32]
+    np2:
+        shape: [16, 32, 32]
+    np3:
+        shape: [32, 16, 16]
+    np4:
+        shape: [32, 16, 16]
+synapse_pools:
+    sp_id:
+        source: 
+        - [np1]
+        target: np2
+        rf: [[1]]
+        init W_0_0: id
+    sp_mid:
+        source: 
+        - [np2]
+        target: np1
+        rf: [[1]]
+        init W_0_0: -id
+    sp_xavier:
+        source: 
+        - [np2]
+        target: np3
+        rf: [[5]]
+    sp_xavier_par:
+        source:
+        - [np3]
+        target: np2
+        rf: [[5]]
+        init W_0_0: xavier_4.0
+    sp_bilin:
+        source:
+        - [np3]
+        target: np4
+        rf: [[5]]
+        init W_0_0: bilin
+    sp_normal:
+        source:
+        - [np2]
+        target: np4
+        rf: [[5]]
+        init W_0_0: normal
+    sp_normal_par:
+        source:
+        - [np4]
+        target: np2
+        rf: [[5]]
+        init W_0_0: normal_-0.5_2.0
+plasticities: {}
+interfaces: {}

@@ -1,0 +1,83 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: DAE_cifar10
+agents: 64
+neuron_pools:
+    image:
+        shape: [3, 32, 32]
+        tags: [sensor]
+    noise:
+        shape: [3, 32, 32]
+        noise: normal
+        noise_std: 0.05
+        tags: [noise]
+    encoder:
+        shape: [32, 32, 32]
+        tags: [encoded]
+        device: cuda0
+    decoder:
+        shape: [3, 32, 32]
+        tags: [decoded]
+        act: sigmoid
+        device: cuda0
+synapse_pools:
+    ret_noise:
+        source:
+        - [image]
+        target: noise
+        init W_0_0: id
+        rf: 1
+    noise_enc:
+        source:
+        - [noise]
+        target: encoder
+        rf: 7
+    enc_dec:
+        source:
+        - [encoder]
+        target: decoder
+        rf: 7
+plasticities:
+    dae:
+        type: loss
+        loss_function: MSE
+        source: decoder
+        source_t: 3
+        target: image
+        target_t: 0
+        device: cuda0
+        optimizer: adam
+        lr: 1e-5
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, noise_enc, W_0_0]
+#        - [np, encoder, b]
+#        - [sp, enc_dec, W_0_0]
+interfaces:
+    cifar10:
+        type: cifar10
+        in: []
+        out: [cf10_image]
+        remap:
+            cf10_image: image
+        source_path: /opt/dl/data/cifar10/cifar-10-batches-py/
+        fading: 0
+        min_duration: 2
+        max_duration: 4

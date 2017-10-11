@@ -1,0 +1,93 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: test
+agents: 64
+neuron_pools:
+    ret_scalar:
+        shape: [1, 28, 28]
+        noise: normal
+        noise_mean: 0.0
+        noise_std: 0.2
+        tags: [sensor]
+    label_scalar:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    h1_scalar:
+        shape: [32, 14, 14]
+        tags: [hidden]
+        device: cuda0
+    h2_scalar:
+        shape: [128, 1, 1]
+        tags: [hidden]
+        device: cuda0
+    pred_scalar:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    alea_scalar:
+        shape: [1, 1, 1]
+        tags: [uncertainty]
+synapse_pools:
+    img_h1_scalar:
+        source:
+        - [ret_scalar]
+        target: h1_scalar
+        rf: 5
+    h1_h2_scalar:
+        source:
+        - [h1_scalar]
+        target: h2_scalar
+    h2_pred_scalar:
+        source:
+        - [h2_scalar]
+        target: pred_scalar
+    sp_alea_scalar:
+        source:
+        - [h2_scalar]
+        target: alea_scalar
+plasticities:
+    loss_scalar:
+        type: loss
+        loss_function: negloglikelihood
+        source: pred_scalar
+        device: cuda0
+        aleatoric_uncertainty: alea_scalar
+        source_t: 3
+        target: label_scalar
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, img_h1_scalar, W_0_0]
+        - [sp, h1_h2_scalar, W_0_0]
+        - [sp, h2_pred_scalar, W_0_0]
+        - [sp, sp_alea_scalar, W_0_0]
+        - [np, h2_scalar, b]
+interfaces:
+    mnist_scalar:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: ret_scalar
+            mnist_label: label_scalar
+            mnist_pred: pred_scalar
+        source_file: /opt/dl/data/mnist.pkl.gz

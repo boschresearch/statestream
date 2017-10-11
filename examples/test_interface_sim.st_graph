@@ -1,0 +1,125 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# An example to test / illustrate the c-simulation.
+# Dataset required: 
+#     None
+
+
+name: test_interface_sim
+agents: 16
+neuron_pools:
+    ret_fov:
+        shape: [3, 256, 1]
+        tags: [sensor]
+    ret_per:
+        shape: [3, 180, 1]
+        tags: [sensor]
+    dist_fov:
+        shape: [1, 256, 1]
+        tags: [sensor]
+    dist_per:
+        shape: [1, 180, 1]
+        tags: [sensor]
+    acc_x:
+        shape: [64, 1, 1]
+        tags: [sensor]
+    acc_y:
+        shape: [64, 1, 1]
+        tags: [sensor]
+    acc_a:
+        shape: [64, 1, 1]
+        tags: [sensor]
+    FOV_fov:
+        shape: [64, 1, 1]
+        tags: [sensor]
+    lookat:
+        shape: [64, 1, 1]
+        tags: [sensor]
+    haptic:
+        shape: [64, 1, 1]
+        tags: [sensor]
+    Fx:
+        shape: [1, 1, 1]
+        tags: [motor]
+    Fy:
+        shape: [1, 1, 1]
+        tags: [motor]
+    Fa:
+        shape: [1, 1, 1]
+        tags: [motor]
+    F_FOV_fov:
+        shape: [1, 1, 1]
+        tags: [motor]
+    F_lookat:
+        shape: [1, 1, 1]
+        tags: [motor]
+synapse_pools: {}
+plasticities: {}
+interfaces:
+    my_sim:
+        type: sim
+        in: [Fx, Fy, Fa, F_FOV_fov, F_lookat]
+        out: [ret_fov, ret_per, dist_fov, dist_per, acc_x, acc_y, acc_a, FOV_fov, lookat, haptic]
+        screen_width: 1600
+        screen_height: 800
+        fov_receptors: 256
+        per_receptors: 180
+        hap_receptors: 64
+        out_par:
+            acc_x:
+                type: selective
+                func_y: gauss
+                func_y_amp: 1.0
+                func_y_sigma: 0.2
+                func_x: linear
+                func_x_min: -10
+                func_x_max: 10
+            acc_y:
+                type: selective
+                func_y: gauss
+                func_y_amp: 1.0
+                func_y_sigma: 0.2
+                func_x: linear
+                func_x_min: -10
+                func_x_max: 10
+            acc_a:
+                type: selective
+                func_y: gauss
+                func_y_amp: 1.0
+                func_y_sigma: 0.2
+                func_x: linear
+                func_x_min: -4
+                func_x_max: 4
+            FOV_fov:
+                type: selective
+                func_y: gauss
+                func_y_amp: 1.0
+                func_y_sigma: 0.2
+                func_x: linear
+                func_x_min: 0
+                func_x_max: 1
+            lookat:
+                type: selective
+                func_y: gauss
+                func_y_amp: 1.0
+                func_y_sigma: 0.2
+                func_x: linear
+                func_x_min: -2
+                func_x_max: 2
+
+

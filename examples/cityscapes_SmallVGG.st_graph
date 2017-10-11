@@ -1,0 +1,244 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# This is a smaller version of the VGG16 network for cityscapes.
+# Dataset required: 
+#     * cityscapes (see interfaces/process_if_cityscapes.py)
+
+
+name: cityscapes_SmallVGG
+tag_specs:
+    conv:
+        act: relu
+        device: cuda0
+agents: 6
+neuron_pools:
+    image:
+        shape: [3, 256, 128]
+        tags: [sensor]
+    label:
+        shape: [19, 128, 64]
+        tags: [sensor]
+    class:
+        shape: [3, 128, 64]
+        tags: [sensor]
+    mask:
+        shape: [1, 128, 64]
+        tags: [sensor]
+    conv1_1:
+        shape: [32, 128, 64]
+        tags: [conv]
+        noise: normal
+        noise_mean: 0.0
+        noise_std: 0.01
+    conv1_2:
+        shape: [32, 128, 64]
+        tags: [conv]
+    conv2_1:
+        shape: [64, 128, 64]
+        tags: [conv]
+    conv2_2:
+        shape: [64, 128, 64]
+        tags: [conv]
+    conv3_1:
+        shape: [128, 64, 32]
+        tags: [conv]
+    conv3_2:
+        shape: [128, 64, 32]
+        tags: [conv]
+    conv3_3:
+        shape: [128, 64, 32]
+        tags: [conv]
+        device: cuda0
+    conv4_1:
+        shape: [256, 32, 16]
+        tags: [conv]
+        device: cuda0
+    conv4_2:
+        shape: [256, 32, 16]
+        tags: [conv]
+        device: cuda0
+    conv4_3:
+        shape: [256, 32, 16]
+        tags: [conv]
+        device: cuda0
+    dense1:
+        shape: [512, 32, 16]
+        tags: [dense]
+        device: cuda0
+    prediction:
+        shape: [19, 32, 16]
+        tags: [prediction]
+    us1:
+        shape: [19, 128, 64]
+        tags: [upsample]
+        device: cuda0
+        act: softmax
+    pred_class:
+        shape: [3, 128, 64]
+synapse_pools:
+    ret_c11:
+        source:
+        - [image]
+        target: conv1_1
+        rf: 3
+    c11_c12:
+        source:
+        - [conv1_1]
+        target: conv1_2
+        rf: 3
+    c12_c21:
+        source:
+        - [conv1_2]
+        target: conv2_1
+        rf: 3
+    c21_c22:
+        source:
+        - [conv2_1]
+        target: conv2_2
+        rf: 3
+    c22_c31:
+        source:
+        - [conv2_2]
+        target: conv3_1
+        rf: 3
+    c31_c32:
+        source:
+        - [conv3_1]
+        target: conv3_2
+        rf: 3
+        dilation:
+        - [2]
+    c32_c33:
+        source:
+        - [conv3_2]
+        target: conv3_3
+        rf: 3
+        dilation:
+        - [2]
+    c33_c41:
+        source:
+        - [conv3_3]
+        target: conv4_1
+        rf: 3
+        dilation:
+        - [2]
+    c41_c42:
+        source:
+        - [conv4_1]
+        target: conv4_2
+        rf: 3
+        dilation:
+        - [2]
+    c42_c43:
+        source:
+        - [conv4_2]
+        target: conv4_3
+        rf: 3
+        dilation:
+        - [2]
+    c43_d1:
+        source:
+        - [conv4_3]
+        target: dense1
+        rf: 5
+    d1_pred:
+        source:
+        - [dense1]
+        target: prediction
+        rf:
+        - [1]
+    pred_us1:
+        source:
+        - [prediction]
+        target: us1
+        init W_0_0: bilin
+        rf: 3
+plasticities:
+    full_loss_1:
+        type: loss
+        loss_function: negloglikelihood
+        device: cuda0
+        source: us1
+        source_t: 13
+        target: label
+        target_t: 0
+        bottleneck: 0.9
+        mask: mask
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, d1_pred, W_0_0]
+        - [sp, c43_d1, W_0_0]
+        - [sp, c42_c43, W_0_0]
+        - [sp, c41_c42, W_0_0]
+        - [sp, c33_c41, W_0_0]
+        - [sp, c32_c33, W_0_0]
+        - [sp, c31_c32, W_0_0]
+        - [sp, c22_c31, W_0_0]
+        - [sp, c21_c22, W_0_0]
+        - [sp, c12_c21, W_0_0]
+        - [sp, c11_c12, W_0_0]
+        - [sp, ret_c11, W_0_0]
+    full_loss_2:
+        type: loss
+        loss_function: negloglikelihood
+        device: cuda0
+        source: us1
+        source_t: 13
+        target: label
+        target_t: 0
+        bottleneck: 0.9
+        mask: mask
+        optimizer: rmsprop
+        lr: 1e-4
+        rho: 0.9
+        parameter:
+        - [sp, d1_pred, W_0_0]
+        - [sp, c43_d1, W_0_0]
+        - [sp, c42_c43, W_0_0]
+        - [sp, c41_c42, W_0_0]
+        - [sp, c33_c41, W_0_0]
+        - [sp, c32_c33, W_0_0]
+        - [sp, c31_c32, W_0_0]
+        - [sp, c22_c31, W_0_0]
+        - [sp, c21_c22, W_0_0]
+        - [sp, c12_c21, W_0_0]
+        - [sp, c11_c12, W_0_0]
+        - [sp, ret_c11, W_0_0]
+interfaces:
+    cityscapes:
+        type: cityscapes
+        processes: 12
+        samples: 24
+        in: [cs_pred]
+        out: [cs_image, cs_class, cs_pclass, cs_label, cs_mask]
+        remap:
+            cs_image: image
+            cs_class: class
+            cs_label: label
+            cs_mask: mask
+            cs_pred: us1
+            cs_pclass: pred_class
+        label_path: /local/data/datasets/cityscapes/gtFine_trainvaltest/gtFine/
+        image_path: /local/data/datasets/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/
+        conf-mat window: 16
+        conf-mat mean over: 32
+        min_duration: 16
+        max_duration: 16

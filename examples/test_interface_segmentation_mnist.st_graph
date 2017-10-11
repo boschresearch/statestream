@@ -1,0 +1,37 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: test_interface_mnist_segmentation
+agents: 16
+neuron_pools:
+    seg_mnist_image:
+        shape: [1, 112, 56]
+        tags: [sensor]
+    seg_mnist_label:
+        shape: [10, 112, 56]
+        tags: [sensor]
+synapse_pools: {}
+plasticities: {}
+interfaces:
+    mnist_segmentation:
+        type: mnist_segmentation
+        in: []
+        out: [seg_mnist_image, seg_mnist_label]
+        source_file: /opt/dl/data/mnist.pkl.gz
+        min_duration: 12
+        max_duration: 16

@@ -1,0 +1,83 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: test_np_specifications
+agents: 64
+neuron_pools:
+    image:
+        shape: [1, 28, 28]
+        tags: [sensor]
+    np_dropout:
+        shape: [16, 14, 14]
+        dropout: 0.3
+    np_noise:
+        shape: [16, 14, 14]
+        noise: uniform
+        noise min: 0.1
+        noise max: 0.5
+    np_act:
+        shape: [16, 14, 14]
+        act: relu    
+    np_batchnorm:
+        shape: [16, 14, 14]
+        batchnorm_mean: scalar 
+    np_all:
+        shape: [16, 14, 14]
+        dropout: 0.1
+        noise: normal
+        noise mean: 0.1
+        noise std: 0.2
+        act: tanh
+        batchnorm_mean: scalar
+        layernorm_mean: feature
+        tags: [all]
+synapse_pools:
+    sp_dropout:
+        source: 
+        - [image]
+        target: np_dropout
+        rf: 5
+    sp_noise:
+        source: 
+        - [image]
+        target: np_noise
+        rf: 5
+    sp_act:
+        source: 
+        - [image]
+        target: np_act
+        rf: 5
+    sp_batchnorm:
+        source: 
+        - [image]
+        target: np_batchnorm
+        rf: 5
+    sp_all:
+        source: 
+        - [image]
+        rf: 5
+        target: np_all
+plasticities: {}
+interfaces:
+    mnist_small:
+        type: mnist
+        in: []
+        out: [mnist_image]
+        remap:
+            mnist_image: image
+        source_file: /opt/dl/data/mnist.pkl.gz

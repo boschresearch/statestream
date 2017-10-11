@@ -1,0 +1,151 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+
+
+name: test_core_client_trainvaltest
+agents: 256
+core_clients:
+    lr_scheduler:
+        type: lr_scheduler
+        plast: h3_loss
+        schedule: exponential_decay
+        decay: 0.9995
+    trainvaltest:
+        type: trainvaltest
+        target_folder: /local/data/sessions/
+        main_interface: mnist
+        main_plasticity: h3_loss
+        test_after_epochs: 12
+        validate_after_epochs: 1
+neuron_pools:
+    image:
+        shape: [3, 28, 28]
+        noise: normal
+        noise_mean: 0.0
+        noise_std: 0.05
+        tags: [sensor]
+    label:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    hidden1:
+        shape: [16, 14, 14]
+        act: relu
+        tags: [hidden]
+        device: cuda1
+    hidden2:
+        shape: [32, 7, 7]
+        act: relu
+        tags: [hidden]
+        dropout: 0.1
+        device: cuda1
+    hidden3:
+        shape: [128, 1, 1]
+        act: relu
+        tags: [hidden]
+        dropout: 0.25
+        device: cuda1
+    prediction:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+synapse_pools:
+    img_hidden1:
+        source: [[image]]
+        target: hidden1
+        rf: [[5]]
+    hidden1_2:
+        source: [[hidden1]]
+        target: hidden2
+        rf: [[5]]
+    hidden2_3:
+        source: [[hidden2]]
+        target: hidden3
+    hidden1_pred:
+        source: [[hidden1]]
+        target: prediction
+    hidden2_pred:
+        source: [[hidden2]]
+        target: prediction
+    hidden3_pred:
+        source:
+        - [hidden3]
+        target: prediction
+plasticities:
+    h3_loss:
+        type: loss
+        loss_function: negloglikelihood
+        source: prediction
+        device: cuda1
+        source_t: 4
+        target: label
+        target_t: 0
+        optimizer: rmsprop
+        lr: 1e-4
+        rho: 0.9
+        parameter:
+        - [sp, img_hidden1, W_0_0]
+        - [sp, hidden1_2, W_0_0]
+        - [sp, hidden2_3, W_0_0]
+        - [sp, hidden3_pred, W_0_0]
+    h2_loss:
+        type: loss
+        loss_function: negloglikelihood
+        source: prediction
+        device: cuda1
+        source_t: 3
+        target: label
+        target_t: 0
+        optimizer: rmsprop
+        lr: 5e-4
+        rho: 0.9
+        parameter:
+        - [sp, img_hidden1, W_0_0]
+        - [sp, hidden1_2, W_0_0]
+        - [sp, hidden2_pred, W_0_0]
+    h1_loss:
+        type: loss
+        loss_function: negloglikelihood
+        source: prediction
+        device: cuda1
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: rmsprop
+        lr: 5e-4
+        rho: 0.9
+        parameter:
+        - [sp, img_hidden1, W_0_0]
+        - [sp, hidden1_pred, W_0_0]
+interfaces:
+    mnist:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: image
+            mnist_label: label
+            mnist_pred: prediction
+        source_file: /opt/dl/data/mnist.pkl.gz
+        fading: 0
+        train samples: 50000
+        valid samples: 10000
+        test samples: 10000
+        conf-mat window: 8
+        conf-mat mean over: 1
+

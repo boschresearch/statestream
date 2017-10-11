@@ -1,0 +1,114 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# An example to test / illustrate how parameters can be shared between
+# neuron-pools.
+# Dataset required: 
+#     * mnist (see interfaces/process_if_mnist.py)
+
+
+name: test_parameter_sharing
+agents: 64
+neuron_pools:
+    image:
+        shape: [1, 28, 28]
+        tags: [sensor]
+    mnist_label:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    hidden:
+        shape: [8, 7, 7]
+        device: cpu
+        dropout: 0.01
+        tags: [hidden]
+    prediction1_1:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    prediction1_2:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    prediction2_1:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+    prediction2_2:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+synapse_pools:
+    img_hidden:
+        source: 
+        - [image]
+        target: hidden
+        rf: 5
+    hidden1_1:
+        source: 
+        - [hidden]
+        target: prediction1_1
+    hidden1_2:
+        source: 
+        - [hidden]
+        target: prediction1_2
+        share params:
+            W_0_0: [hidden1_1, W_0_0]
+    hidden2_1:
+        source: 
+        - [hidden]
+        target: prediction2_1
+    hidden2_2:
+        source: 
+        - [hidden]
+        target: prediction2_2
+        share params:
+            W_0_0: [hidden2_1, W_0_0]
+plasticities:
+    hidden_loss1:
+        device: cpu
+        type: loss
+        loss_function: negloglikelihood
+        source: prediction1_1
+        source_t: 2
+        target: mnist_label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter: [[sp, hidden1_1, W_0_0]]
+    hidden_loss2:
+        device: cpu
+        type: loss
+        loss_function: negloglikelihood
+        source: prediction2_2
+        source_t: 2
+        target: mnist_label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter: [[sp, hidden2_2, W_0_0]]
+interfaces:
+    mnist_small:
+        type: mnist
+        in: []
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: image
+        source_file: /opt/dl/data/mnist.pkl.gz

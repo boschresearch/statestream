@@ -1,0 +1,70 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: test_interface_remapping
+agents: 64
+neuron_pools:
+    image:
+        shape: [1, 28, 28]
+        tags: [sensor]
+    label:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    hidden:
+        shape: [8, 7, 7]
+        device: cpu
+        dropout: 0.01
+        tags: [hidden]
+    prediction:
+        shape: [10, 1, 1]
+        act: softmax
+        tags: [prediction]
+synapse_pools:
+    img_hidden:
+        source: 
+        - [image]
+        target: hidden
+        rf: 5
+    hidden_classifier:
+        source: 
+        - [hidden]
+        target: prediction
+plasticities:
+    hidden_loss:
+        device: cpu
+        type: loss
+        loss_function: negloglikelihood
+        source: prediction
+        source_t: 2
+        target: label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter: 
+        - [sp, hidden_classifier, W_0_0]
+interfaces:
+    mnist_small:
+        type: mnist
+        in: []
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: image
+            mnist_label: label
+        source_file: /opt/dl/data/mnist.pkl.gz

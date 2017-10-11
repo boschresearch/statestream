@@ -1,0 +1,160 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# This is a small comparison between two different ways to realize
+# an mnist classification loss. Once the loss is compute inside the
+# plasticity using a network rollout inside the plasticity and the
+# second time the loss is computed explicitly in the network and
+# only a minimize plasticity is used to minimize the activation of
+# the loss neuron-pool.
+# Dataset required: 
+#     * mnist (see interfaces/process_if_mnist.py)
+
+
+name: mnist_compare_explicit_loss
+agents: 128
+modules:
+    mnist_net:
+        neuron_pools:
+            ret:
+                shape: [1, 28, 28]
+            label:
+                shape: [10, 1, 1]
+            h1:
+                shape: [16, 14, 14]
+                device: cuda7
+            h2:
+                shape: [32, 7, 7]
+                device: cuda7
+            h3:
+                shape: [128, 1, 1]
+                device: cuda7
+            pred:
+                shape: [10, 1, 1]
+                act: softmax
+        synapse_pools:
+            ret_h1:
+                source: [[ret]]
+                target: h1
+                rf: [[5]]
+            h1_h2:
+                source: [[h1]]
+                target: h2
+                rf: [[5]]
+            h2_h3:
+                source: [[h2]]
+                target: h3
+            h3_pred:
+                source: [[h3]]
+                target: pred
+mnist_net:
+    imp: {}
+    exp: {}
+neuron_pools:
+    cp_h1:
+        shape: [10, 1, 1]
+    cp_h2:
+        shape: [10, 1, 1]
+    cp_h3:
+        shape: [10, 1, 1]
+    cp_pred:
+        shape: [10, 1, 1]
+    exp_loss:
+        shape: [10, 1, 1]
+synapse_pools:
+    cp_label_h1:
+        source:
+        - [exp_label]
+        target: cp_h1
+        init W_0_0: id
+    cp_h1_h2:
+        source:
+        - [cp_h1]
+        target: cp_h2
+        init W_0_0: id
+    cp_h2_h3:
+        source:
+        - [cp_h2]
+        target: cp_h3
+        init W_0_0: id
+    cp_h3_pred:
+        source:
+        - [cp_h3]
+        target: cp_pred
+        init W_0_0: id
+    exp_pred_loss:
+        source:
+        - [exp_pred]
+        - [cp_pred]
+        target: exp_loss
+        init W_0_0: id
+        init W_1_0: id
+        act: [neglog, Id]
+plasticities:
+    implicit_loss:
+        type: loss
+        loss_function: negloglikelihood
+        source: imp_pred
+        device: cuda7
+        source_t: 4
+        target: imp_label
+        target_t: 0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, imp_ret_h1, W_0_0]
+        - [sp, imp_h1_h2, W_0_0]
+        - [sp, imp_h2_h3, W_0_0]
+        - [sp, imp_h3_pred, W_0_0]
+        - [np, imp_h3, b]
+    explicit_loss:
+        type: loss
+        loss_function: minimize
+        source: exp_loss
+        device: cuda7
+        source_t: 5
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, exp_ret_h1, W_0_0]
+        - [sp, exp_h1_h2, W_0_0]
+        - [sp, exp_h2_h3, W_0_0]
+        - [sp, exp_h3_pred, W_0_0]
+        - [np, exp_h3, b]
+interfaces:
+    imp_mnist:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: imp_ret
+            mnist_label: imp_label
+            mnist_pred: imp_pred
+        source_file: /opt/dl/data/mnist.pkl.gz
+    exp_mnist:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: exp_ret
+            mnist_label: exp_label
+            mnist_pred: exp_pred
+        source_file: /opt/dl/data/mnist.pkl.gz

@@ -1,0 +1,67 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# An example to test / illustrate the cityscapes interface.
+# Dataset required: 
+#     * cityscapes (see interfaces/process_if_cityscapes.py)
+
+
+name: test_interface_cityscapes
+agents: 2
+neuron_pools:
+    image:
+        shape: [3, 512, 256]
+        tags: [sensor]
+    label:
+        shape: [19, 512, 256]
+        tags: [sensor]
+    class:
+        shape: [3, 512, 256]
+        tags: [sensor]
+    pred_class:
+        shape: [3, 512, 256]
+        tags: [sensor]
+    mask:
+        shape: [1, 512, 256]
+        tags: [sensor]
+    prediction:
+        shape: [19, 512, 256]
+        tags: [sensor]
+        act: sigmoid
+synapse_pools:
+    copy:
+        source: [[label]]
+        target: prediction
+        rf: [[1]]
+        init W_0_0: id
+plasticities: {}
+interfaces:
+    cityscapes:
+        type: cityscapes
+        processes: 6
+        samples: 12
+        in: [cs_pred]
+        out: [cs_image, cs_class, cs_label, cs_mask, cs_pclass]
+        remap:
+            cs_image: image
+            cs_class: class
+            cs_label: label
+            cs_mask: mask
+            cs_pred: prediction
+            cs_pclass: pred_class
+        label_path: /local/data/datasets/cityscapes/gtFine_trainvaltest/gtFine/
+        image_path: /local/data/datasets/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/

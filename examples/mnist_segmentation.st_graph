@@ -1,0 +1,99 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# This is a small example for a mnist segmentation.
+# Dataset required: 
+#     * mnist_segmentation (see interfaces/process_if_mnist_segmentation.py)
+
+
+name: mnist_segmentation
+agents: 32
+neuron_pools:
+    image:
+        shape: [1, 56, 56]
+        noise: normal
+        noise_mean: 0.0
+        noise_std: 0.1
+        tags: [sensor]
+    label:
+        shape: [10, 56, 56]
+        tags: [sensor]
+    mask:
+        shape: [1, 56, 56]
+        tags: [sensor]
+    hidden1:
+        shape: [32, 14, 14]
+        act: relu
+        dropout: 0.2
+        device: cuda0
+    hidden2:
+        shape: [10, 14, 14]
+        act: relu
+        device: cuda0
+    prediction:
+        shape: [10, 56, 56]
+        tags: [prediction]
+        act: softmax
+        device: cuda0
+synapse_pools:
+    img_h1:
+        source:
+        - [image]
+        target: hidden1
+        rf: 19
+    h1_h2:
+        source:
+        - [hidden1]
+        target: hidden2
+        rf: 3
+    h2_pred:
+        source:
+        - [hidden2]
+        target: prediction
+        init W_0_0: bilin
+        rf: 5
+plasticities:
+    hidden_loss:
+        type: loss
+        loss_function: negloglikelihood
+        device: cuda0
+        source: prediction
+        source_t: 3
+        target: label
+        target_t: 0
+        mask: mask
+        optimizer: adam
+        lr: 2e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, h1_h2, W_0_0]
+        - [sp, img_h1, W_0_0]
+interfaces:
+    mnist_segmentation:
+        type: mnist_segmentation
+        in: [seg_mnist_pred]
+        out: [seg_mnist_image, seg_mnist_label, seg_mnist_mask]
+        remap:
+            seg_mnist_image: image
+            seg_mnist_label: label
+            seg_mnist_pred: prediction
+            seg_mnist_mask: mask
+        source_file: /opt/dl/data/mnist.pkl.gz
+        min_duration: 6
+        max_duration: 8
+        conf-mat mean over: 24

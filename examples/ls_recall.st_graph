@@ -1,0 +1,87 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# This is a very small example of a simplified LSTM version to test
+# simple prediction / memorization features.
+# Dataset required: 
+#     textfile(s) (see interfaces/process_if_lettersequence.py)
+
+
+name: ls_recall
+agents: 256
+modules:
+    letternet:
+        neuron_pools:
+            np0:
+                shape: [128, 1, 1]
+            np1:
+                shape: [128, 1, 1]
+            lstm:
+                shape: [256, 1, 1]
+            pred:
+                shape: [128, 1, 1]
+        synapse_pools:
+            input:
+                source:
+                - [np0, lstm]
+                - [np0, lstm]
+                target: lstm
+                act: [tanh, sigmoid]
+            output:
+                source:
+                - [lstm]
+                target: pred
+        plasticities:
+            loss:
+                type: loss
+                loss_function: categorical_crossentropy
+                source: pred
+                source_t: 2
+                target: np0
+                target_t: 0
+                optimizer: rmsprop
+                lr: 1e-4
+                rho: 0.9
+                parameter:
+                - [sp, input, W_0_0]
+                - [sp, input, W_0_1]
+                - [sp, input, W_1_0]
+                - [sp, input, W_1_1]
+                - [sp, output, W_0_0]
+        interfaces:
+            lsif:
+                type: lettersequence
+                in: [ls_pred]
+                out: [ls_seq_0, ls_seq_1]
+                remap:
+                    ls_seq_0: np0
+                    ls_seq_1: np1
+                    ls_pred: pred
+                source_path: /local/data/datasets/textcorpus
+                offset: _offset
+                conf-mat window: 4
+letternet:
+    copy:
+        offset: 0
+    mem:
+        offset: -1
+    pred:
+        offset: 1
+neuron_pools: {}
+synapse_pools: {}
+plasticities: {}
+interfaces: {}

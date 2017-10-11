@@ -1,0 +1,133 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# An example to test and illustrate the usage of modules in network 
+# specification.
+# Datasets required:
+#     None
+
+
+name: test_module
+agents: 16
+modules:
+    LSTM:
+        neuron_pools:
+            lstm:
+                shape: _shape
+                tags: [LSTM]
+                act: relu
+                dropout: 0.5
+        synapse_pools:
+            I:
+                source:
+                - [_source, lstm]
+                - [_source, lstm]
+                target: lstm
+                act: [sigmoid, tanh]
+            F:
+                source:
+                - [_source, lstm]
+                - [_source, lstm]
+                target: lstm
+                act: [sigmoid, tanh]
+    convLSTM:
+        neuron_pools:
+            lstm:
+                shape: _shape
+                tags: [convLSTM]
+                act: relu
+                dropout: 0.5
+        synapse_pools:
+            I:
+                source:
+                - [_source, lstm]
+                - [_source, lstm]
+                target: lstm
+                rf:
+                - [_rf, _rf]
+                - [_rf, _rf]
+                act: [sigmoid, tanh]
+            F:
+                source:
+                - [_source, lstm]
+                - [_source, lstm]
+                target: lstm
+                rf:
+                - [_rf, _rf]
+                - [_rf, _rf]
+                act: [sigmoid, tanh]
+    cArea:
+        neuron_pools:
+            L23:
+                shape: _shape_bottom
+                tags: [cortex, L23]
+                act: relu
+                dropout: 0.2
+            L4:
+                shape: _shape_top
+                tags: [cortex, L4]
+                act: relu
+                dropout: 0.2
+            L5:
+                shape: _shape_top
+                tags: [cortex, L5]
+                act: relu
+                dropout: 0.2
+            L6:
+                shape: _shape_bottom
+                tags: [cortex, L6]
+                act: relu
+                dropout: 0.2
+        synapse_pools:
+            L4L23:
+                source: [[L4]]
+                target: L23
+                rf: [[_rf]]
+            L23L5:
+                source: [[L23]]
+                target: L5
+                rf: [[_rf]]
+            L5L6:
+                source: [[L5]]
+                target: L6
+                rf: [[_rf]]
+            L6L4:
+                source: [[L6]]
+                target: L4
+                rf: [[_rf]]
+cArea:
+    V1:
+        shape_bottom: [32, 128, 128]
+        shape_top: [64, 64, 64]
+        rf: 3
+    MT:
+        shape_bottom: [256, 1, 1]
+        shape_top: [128, 1, 1]
+        rf: 1
+LSTM:
+    lstm0:
+        source: np_0
+        shape: [128, 1, 1]
+    lstm1:
+        source: lstm0_lstm
+        shape: [128, 1, 1]
+neuron_pools:
+    np_0:
+        shape: [1,1,1]
+synapse_pools: {}
+plasticities: {}
+interfaces: {}

@@ -1,0 +1,128 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# This is a small feed forward network reaching some performance on cifar-10.
+# Dataset required: 
+#     * cifar-10 (see interfaces/process_if_cifar10.py)
+
+
+name: cifar10_small
+agents: 64
+neuron_pools:
+    image:
+        shape: [3, 32, 32]
+        tags: [sensor]
+    label:
+        shape: [10, 1, 1]
+        tags: [sensor]
+    conv1_1:
+        shape: [32, 32, 32]
+        tags: [conv1]
+        act: selu
+    conv1_2:
+        shape: [32, 16, 16]
+        tags: [conv1]
+        act: selu
+        dropout: 0.25
+        device: cuda0
+    conv2_1:
+        shape: [64, 16, 16]
+        tags: [conv2]
+        act: selu
+        device: cuda0
+    conv2_2:
+        shape: [64, 8, 8]
+        tags: [conv2]
+        act: selu
+        dropout: 0.25
+        device: cuda0
+    dense:
+        shape: [512, 1, 1]
+        tags: [dense]
+        act: selu
+        dropout: 0.5
+        device: cuda0
+    prediction:
+        shape: [10, 1, 1]
+        tags: [prediction]
+        act: softmax
+synapse_pools:
+    ret_c11:
+        source:
+        - [image]
+        target: conv1_1
+        rf: 3
+    c11_c12:
+        source:
+        - [conv1_1]
+        target: conv1_2
+        rf: 3
+    c12_c21:
+        source:
+        - [conv1_2]
+        target: conv2_1
+        rf: 3
+    c21_c22:
+        source:
+        - [conv2_1]
+        target: conv2_2
+        rf: 3
+    c22_d:
+        source:
+        - [conv2_2]
+        target: dense
+    d_pred:
+        source:
+        - [dense]
+        target: prediction
+plasticities:
+    hidden_loss:
+        type: loss
+        loss_function: negloglikelihood
+        device: cuda0
+        source: prediction
+        source_t: 6
+        target: label
+        target_t: 0
+        optimizer: rmsprop
+        lr: 1e-4
+        rho: 0.9
+        parameter:
+        - [sp, d_pred, W_0_0]
+        - [sp, c22_d, W_0_0]
+        - [sp, c21_c22, W_0_0]
+        - [sp, c12_c21, W_0_0]
+        - [sp, c11_c12, W_0_0]
+        - [sp, ret_c11, W_0_0]
+        - [np, conv1_1, b]
+        - [np, conv1_2, b]
+        - [np, conv2_1, b]
+        - [np, conv2_2, b]
+        - [np, dense, b]
+interfaces:
+    cifar10:
+        type: cifar10
+        in: [cf10_pred]
+        out: [cf10_image, cf10_label]
+        remap:
+            cf10_pred: prediction
+            cf10_image: image
+            cf10_label: label
+        source_path: /opt/dl/data/cifar10/cifar-10-batches-py/
+        fading: 0
+        min_duration: 8
+        max_duration: 12

@@ -1,0 +1,85 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+name: DAE_cityscapes
+agents: 8
+neuron_pools:
+    image:
+        shape: [3, 256, 128]
+        tags: [sensor]
+    noise:
+        shape: [3, 256, 128]
+        noise: normal
+        noise_std: 0.1
+        tags: [noise]
+    encoder:
+        shape: [32, 256, 128]
+        tags: [encoded]
+        device: cuda0
+    decoder:
+        shape: [3, 256, 128]
+        tags: [decoded]
+        device: cuda0
+        act: sigmoid
+synapse_pools:
+    ret_noise:
+        source:
+        - [image]
+        target: noise
+        init W_0_0: id
+        rf: 1
+    noise_enc:
+        source:
+        - [noise]
+        target: encoder
+        rf: 9
+    enc_dec:
+        source:
+        - [encoder]
+        target: decoder
+        rf: 1
+plasticities:
+    dae:
+        type: loss
+        loss_function: MSE
+        source: decoder
+        source_t: 3
+        target: image
+        target_t: 0
+        device: cuda0
+        optimizer: adam
+        lr: 1e-4
+        decay: 0.999
+        momentum: 0.99
+        parameter:
+        - [sp, noise_enc, W_0_0]
+#        - [np, encoder, b]
+#        - [sp, enc_dec, W_0_0]
+interfaces:
+    mnist_ae:
+        type: cityscapes
+        processes: 12
+        samples: 24
+        in: []
+        out: [cs_image]
+        remap:
+            cs_image: image
+        label_path: /local/data/datasets/cityscapes/gtFine_trainvaltest/gtFine/
+        image_path: /local/data/datasets/cityscapes/leftImg8bit_trainvaltest/leftImg8bit/
+        min_duration: 2
+        max_duration: 4

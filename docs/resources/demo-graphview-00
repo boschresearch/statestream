@@ -1,0 +1,403 @@
+items:
+  img_hidden1:
+    pos:
+    - 529.5346677979112
+    - 267.65742091931594
+    pause: 0
+  label:
+    pos:
+    - 1262.0
+    - 728.0
+    pause: 0
+  hidden3_pred:
+    pos:
+    - 950.7669244249735
+    - 638.6437275247822
+    pause: 0
+  hidden2_3:
+    pos:
+    - 817.6468621407407
+    - 515.3500943176186
+    pause: 0
+  prediction:
+    pos:
+    - 1011.966081085228
+    - 693.5912243752031
+    pause: 0
+  roman_numerals:
+    pos:
+    - 215.0
+    - 182.0
+    pause: 0
+  hidden3:
+    pos:
+    - 880.9089970938751
+    - 574.4750177494147
+    pause: 0
+  hidden1_2:
+    pos:
+    - 669.4095045388838
+    - 382.46555957616476
+    pause: 0
+  hidden1:
+    pos:
+    - 602.7036574265027
+    - 326.9137657219049
+    pause: 0
+  hidden2:
+    pos:
+    - 745.0
+    - 447.0
+    pause: 0
+  hidden_loss:
+    pos:
+    - 311.0997841597681
+    - 126.75150183642421
+    pause: 0
+  image:
+    pos:
+    - 464.15358468887797
+    - 216.8271374893252
+    pause: 0
+subwindows:
+- mode: maps
+  source:
+  - image
+  - state
+  magic: ''
+  size:
+  - 131
+  - 132
+  type: item
+  patterns:
+  - '[0,:,:,:]'
+  pos:
+  - -125.85852741860651
+  - 35.17898960266953
+  glob_idx: 0
+  tiles: false
+  tileable: false
+- mode: hist
+  source:
+  - img_hidden1
+  - parameter
+  - W_0_0
+  magic: ''
+  size:
+  - 231
+  - 121
+  type: item
+  patterns:
+  - ''
+  pos:
+  - -208.67984894033293
+  - 166.22188031469847
+  glob_idx: 1
+  tiles: false
+  tileable: false
+- mode: hist
+  source:
+  - hidden1_2
+  - parameter
+  - W_0_0
+  magic: ''
+  size:
+  - 226
+  - 123
+  type: item
+  patterns:
+  - ''
+  pos:
+  - -371.62480838893623
+  - 196.2344404238351
+  glob_idx: 2
+  tiles: false
+  tileable: false
+- mode: hist
+  source:
+  - hidden2_3
+  - parameter
+  - W_0_0
+  magic: ''
+  size:
+  - 223
+  - 122
+  type: item
+  patterns:
+  - ''
+  pos:
+  - -549.2676536624364
+  - 206.06931281812092
+  glob_idx: 3
+  tiles: false
+  tileable: false
+- mode: maps
+  source:
+  - hidden1
+  - state
+  magic: ''
+  size:
+  - 317
+  - 208
+  type: item
+  patterns:
+  - '[0,:,:,:]'
+  pos:
+  - 95.27041891764975
+  - -178.74957625653178
+  glob_idx: 4
+  tiles: true
+  tileable: true
+- mode: maps
+  source:
+  - hidden2
+  - state
+  magic: ''
+  size:
+  - 176
+  - 169
+  type: item
+  patterns:
+  - '[0,:,:,:]'
+  pos:
+  - 134.0
+  - -53.0
+  glob_idx: 5
+  tiles: true
+  tileable: true
+- mode: maps
+  source:
+  - hidden3
+  - state
+  magic: ''
+  size:
+  - 68
+  - 142
+  type: item
+  patterns:
+  - '[0,:,:,:]'
+  pos:
+  - 200.2017390137969
+  - -115.05721331056952
+  glob_idx: 6
+  tiles: false
+  tileable: false
+- mode: maps
+  source:
+  - label
+  - state
+  magic: ''
+  size:
+  - 70
+  - 141
+  type: item
+  patterns:
+  - '[0,:,:,:]'
+  pos:
+  - 27.0
+  - -57.0
+  glob_idx: 7
+  tiles: false
+  tileable: false
+- mode: maps
+  source:
+  - prediction
+  - state
+  magic: ''
+  size:
+  - 67
+  - 138
+  type: item
+  patterns:
+  - '[0,:,:,:]'
+  pos:
+  - 101.73304128738164
+  - -57.70341066199501
+  glob_idx: 8
+  tiles: false
+  tileable: false
+- mode: plot 0
+  source:
+  - prediction
+  - state
+  magic: ''
+  size:
+  - 204
+  - 163
+  type: item
+  patterns:
+  - '[:,:,:,:]'
+  pos:
+  - -522.265163453781
+  - -265.703410661995
+  glob_idx: 9
+  tiles: false
+  tileable: false
+- mode: maps
+  source:
+  - roman_numerals
+  - variables
+  - rn_image
+  magic: ''
+  size:
+  - 312
+  - 306
+  type: item
+  patterns:
+  - ''
+  pos:
+  - 1135.0
+  - 114.0
+  glob_idx: 10
+  tiles: true
+  tileable: true
+- mode: plot 1
+  source:
+  - loss
+  - variables
+  - stats
+  magic: ''
+  size:
+  - 221
+  - 207
+  type: meta_var
+  patterns:
+  - ''
+  pos:
+  - 1086.0
+  - 212.0
+  glob_idx: 11
+  tiles: false
+  tileable: false
+- mode: plot 1
+  source:
+  - np_states
+  - variables
+  - stats
+  magic: ''
+  size:
+  - 292
+  - 154
+  type: meta_var
+  patterns:
+  - ''
+  pos:
+  - 533.0
+  - 682.0
+  glob_idx: 12
+  tiles: false
+  tileable: false
+settings:
+  conn type viz flag:
+    sp: true
+    plast: false
+    sw: false
+    if: false
+  item type viz flag:
+    np: true
+    sp: true
+    plast: true
+    if: true
+  show profiler: 0
+  show name: 1
+meta_vars:
+- name: np_states
+  mv_params:
+  - name: name
+    type: string
+    value: np_states
+    default: meta_var_0
+  - name: window
+    value: 1
+    type: int
+    min: 1
+    max: 2048
+    default: 8
+  - name: nodes
+    value: 300
+    type: int
+    min: 4
+    max: 2048
+    default: 8
+  - name: off X
+    value: 16
+    type: int
+    min: 0
+    max: 100
+    default: 16
+  - name: off Y
+    value: 16
+    type: int
+    min: 0
+    max: 100
+    default: 16
+  - name: size
+    value: 32
+    type: int
+    min: 10
+    max: 100
+    default: 32
+  - name: color
+    value: (200,80,180)
+    type: string
+    min:
+    max:
+    default: (200,80,180)
+  - name: stat
+    value: mean
+    type: string
+    min: 0
+    max: 0
+    default: mean
+  itemized: false
+  type: scalar_stats
+  values_child:
+  - hidden1
+  - label
+  - prediction
+  - hidden3
+  - hidden2
+  - image
+  values_value:
+  - np state
+  - np state
+  - np state
+  - np state
+  - np state
+  - np state
+- name: loss
+  mv_params:
+  - name: name
+    type: string
+    value: loss
+    default: meta_var_0
+  - name: window
+    value: 1
+    type: int
+    min: 1
+    max: 2048
+    default: 8
+  - name: nodes
+    value: 400
+    type: int
+    min: 4
+    max: 2048
+    default: 8
+  - name: color
+    value: (200,80,180)
+    type: string
+    min:
+    max:
+    default: (200,80,180)
+  - name: stat
+    value: mean
+    type: string
+    min: 0
+    max: 0
+    default: mean
+  itemized: false
+  type: scalar_stats
+  values_child:
+  - hidden_loss
+  values_value:
+  - plast var loss1
