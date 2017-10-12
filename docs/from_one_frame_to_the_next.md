@@ -2,9 +2,9 @@ From one frame to the next
 ==========================
 ([back to documentation](README.md))
 
-The statestream toolbox distributes a specified network in a layerwise model-parallel fashion
+The statestream toolbox distributes a specified network in a synchronous layerwise-parallel fashion
 across GPUs and CPUs. The network's elements (items: neuron-pools, synapse-pools, plasticities and
-interfaces) are executed in parallel synchronized in frames, which are composed of a read- and a write phase.
+interfaces) are executed in parallel synchronized in frames, which are composed of a read and a write phase.
 All processes work on a shared representation of the entire network.
 
 An example animation to illuminate the streaming aspect is given below. Here we see a short sequence of frames. 

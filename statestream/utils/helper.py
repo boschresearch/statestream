@@ -194,7 +194,7 @@ class LoadSample(object):
                             y_end = int(c[1][1] * img.shape[0])
                             img = img[y_start:y_end, x_start:x_end,:]
                         if flipX:
-                            img = np.flip(img, 1)
+                            img = np.fliplr(img)
                         # Resize image dependent on item type.
                         if img.shape[1] != self.sample_shape[i][1] or img.shape[0] != self.sample_shape[i][2]:
                             target_shape = (self.sample_shape[i][2], self.sample_shape[i][1])

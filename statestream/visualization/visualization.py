@@ -1721,23 +1721,20 @@ class Visualization(object):
         self.CM_CC = {}
         for cms in self.cm:
             colormap = np.array(matplotlib.pyplot.get_cmap(cms)(np.arange(256) / 255))
+            self.CM_CC[cms] = np.copy(colormap)
+            self.CM_CC[cms][:,0] = colormap[:,2] * 255
+            self.CM_CC[cms][:,1] = colormap[:,1] * 255
+            self.CM_CC[cms][:,2] = colormap[:,0] * 255
+            self.CM_CC[cms] = self.CM_CC[cms].astype(np.int32)
             self.CM[cms] = colormap[:,:]
             if self.ccol:
                 self.CM_RAW[cms] = np.fliplr(((colormap[:,0] * 255).astype(np.int32) + \
                                (colormap[:,1] * 255).astype(np.int32) * 256 + \
                                (colormap[:,2] * 127).astype(np.int32) * 256 * 256)[np.newaxis, :])
-                self.CM_CC[cms] = np.copy(colormap)
-                self.CM_CC[cms][:,0] = colormap[:,2] * 255
-                self.CM_CC[cms][:,1] = colormap[:,1] * 255
-                self.CM_CC[cms][:,2] = colormap[:,0] * 255
-                self.CM_CC[cms] = self.CM_CC[cms].astype(np.int32)
             else:
-                self.CM_RAW[cms] = np.fliplr(((colormap[:,0] * 255).astype(np.int32) + \
+                self.CM_RAW[cms] = np.fliplr(((colormap[:,2] * 255).astype(np.int32) + \
                                (colormap[:,1] * 255).astype(np.int32) * 256 + \
-                               (colormap[:,2] * 255).astype(np.int32) * 256 * 256)[np.newaxis, :])
-                self.CM_CC[cms] = np.copy(colormap)
-                #self.CM_CC[cms][:,0], self.CM_CC[cms][:,2] = colormap[:,2], colormap[:,0]
-                self.CM_CC[cms] = (self.CM_CC[cms]).astype(np.int32)
+                               (colormap[:,0] * 255).astype(np.int32) * 256 * 256)[np.newaxis, :])
         # Get shared memory.
         self.shm = SharedMemory(self.net, 
                                 self.param,
@@ -3889,14 +3886,14 @@ class Visualization(object):
                             int(x), 
                             int(y), 
                             16, 
-                            fill_col=(128, 220, 220))
+                            fill_col=self.cc((128, 220, 220)))
                 x = self.vparam['screen_width'] - 60 + 16 * np.cos(a + np.pi)
                 y = 60 + 16 * np.sin(a + np.pi)
                 plot_circle(self.screen,
                             int(x), 
                             int(y), 
                             16, 
-                            fill_col=(128, 220, 220))
+                            fill_col=self.cc((128, 220, 220)))
                 self.all_up_current = (self.all_up_current + 1) % self.vparam['FPS']
             # =================================================================
 
@@ -3964,13 +3961,13 @@ class Visualization(object):
                                         int(X0 + px), 
                                         int(Y0 + py), 
                                         5, 
-                                        fill_col=DEFAULT_COLORS['light'])
+                                        fill_col=self.cc(DEFAULT_COLORS['light']))
                         else:
                             plot_circle(self.screen,
                                         int(X0 + px), 
                                         int(Y0 + py), 
                                         3, 
-                                        fill_col=self.graph_col[X['type']])
+                                        fill_col=self.cc(self.graph_col[X['type']]))
                 # Blit cross for current mouse position.
                 px = fx * (self.POS[0] - min_item_pos[0])
                 py = fy * (self.POS[1] - min_item_pos[1])

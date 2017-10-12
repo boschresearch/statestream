@@ -18,6 +18,7 @@
 
 import sys
 import numpy as np
+from skimage.transform import resize
 
 try:
     import pickle as pckl
@@ -224,8 +225,10 @@ class ProcessIf_cifar10(ProcessIf):
         self.max_duration = self.p.get("max_duration", 16)
         self.min_duration = self.p.get("min_duration", 12)
         self.min_duration = self.p.get("fading", 4)
-            
-        self.mode = None
+
+        self.augmentation = self.p.get("augmentation", {})
+
+        self.mode = self.p.get("mode", 0)
         self.mode_shuffle = {}
         self.mode_current = {}
 
@@ -294,14 +297,21 @@ class ProcessIf_cifar10(ProcessIf):
         self.current_duration = []
         self.current_elapsed = []
         self.current_sample = []
+        self.current_augmentation = []
+        self.current_image = []
         for a in range(self.net["agents"]):
-            self.current_duration += [np.random.randint(self.min_duration, 
-                                                        self.max_duration + 1)]
+            self.current_duration += [0]
             self.current_elapsed += [0]
-            if a > self.split:
-                self.current_sample += [np.random.randint(0, self.samples['train'])]
-            else:
-                self.current_sample += [np.random.randint(0, self.samples['valid'])]
+            self.current_sample += [0]
+            self.current_augmentation.append({})
+            if 'flipX' in self.augmentation:
+                self.current_augmentation[-1]['flipX'] = False
+            if 'crop' in self.augmentation:
+                self.current_augmentation[-1]['crop'] = [0, 0]
+            self.current_image.append(np.zeros(self.image_shape, dtype=np.float32))
+        for a in range(self.net["agents"]):
+            self.draw_new_sample(a)
+
         for t in ['train', 'valid', 'test']:
             self.mode_shuffle[t] = np.random.permutation(self.samples[t])
             self.mode_current[t] = 0
@@ -318,12 +328,86 @@ class ProcessIf_cifar10(ProcessIf):
             self.cumm_conf_mat = np.zeros(self.TCM_valid.conf_mat.shape, dtype=np.float32)
 
 
+
+    def draw_new_sample(self, a):
+        """Draw a new sample.
+        """
+        self.current_elapsed[a] = 0
+        self.current_duration[a] \
+            = np.random.randint(self.dat["parameter"]["min_duration"],
+                                self.dat["parameter"]["max_duration"] + 1)
+        if 'flipX' in self.augmentation:
+            if np.random.random() > 0.5:
+                self.current_augmentation[a]['flipX'] = True
+            else:
+                self.current_augmentation[a]['flipX'] = False
+        if 'crop' in self.augmentation:
+            crop = [np.random.random() * (1.0 - self.augmentation['crop']),
+                    np.random.random() * (1.0 - self.augmentation['crop'])]
+            self.current_augmentation[a]['crop'] \
+                = [int(self.image_shape[1] * crop[0]),
+                   int(self.image_shape[2] * crop[1])]
+        # Dependent on presentations of this next frame, 
+        # init its parameters.
+        if self.mode in [0, 1]:
+            if a > self.split:
+                self.current_sample[a] = np.random.randint(0, self.samples['train'] - 1)
+            else:
+                self.current_sample[a] = np.random.randint(0, self.samples['valid'] - 1)
+        elif self.mode == 2:
+            if a > self.split:
+                self.current_sample[a] = self.mode_shuffle['train'][self.mode_current['train']]
+                self.mode_current['train'] += 1
+                if self.mode_current['train'] >= self.samples['train']:
+                    self.mode_shuffle['train'] = np.random.permutation(self.samples['train'])
+                    self.mode_current['train'] = 0
+                    self.dat["variables"]["_epoch_trigger_"][0] = 1
+            else:
+                self.current_sample[a] = self.mode_shuffle['valid'][self.mode_current['valid']]
+                self.mode_current['valid'] += 1
+                if self.mode_current['valid'] >= self.samples['valid']:
+                    self.mode_shuffle['valid'] = np.random.permutation(self.samples['valid'])
+                    self.cumm_conf_mat *= 0
+                    self.mode_current['valid'] = 0
+                    self.dat["variables"]["_epoch_trigger_"][1] = 1
+        elif self.mode == 3:
+            self.current_sample[a] = self.mode_shuffle['test'][self.mode_current['test']]
+            self.mode_current['test'] += 1
+            if self.mode_current['test'] >= self.samples['test']:
+                self.mode_shuffle['test'] = np.random.permutation(self.samples['test'])
+                self.cumm_conf_mat *= 0
+                self.mode_current['test'] = 0
+                self.dat["variables"]["_epoch_trigger_"][2] = 1
+        # Set trigger for new stimulus.
+        self.dat["variables"]["_trigger_"][a] = 1
+        # Get image from dataset considering mode.
+        if self.mode in [0, 1, 2]:
+            if a > self.split:
+                img = self.dataset['train']["cf10_image"][self.current_sample[a],:,:,:]
+            else:
+                img = self.dataset['valid']["cf10_image"][self.current_sample[a],:,:,:]
+        elif self.mode == 3:
+            img = self.dataset['test']["cf10_image"][self.current_sample[a],:,:,:]
+        # Generate current image.
+        if 'flipX' in self.augmentation:
+            if self.current_augmentation[a]['flipX']:
+                img = np.fliplr(img)
+        if 'crop' in self.augmentation:
+            new_size_x = int(self.augmentation['crop'] * self.image_shape[1])
+            new_size_y = int(self.augmentation['crop'] * self.image_shape[2])
+            crop = self.current_augmentation[a]['crop']
+            img = img[:,crop[0]:crop[0] + new_size_x, crop[1]:crop[1] + new_size_y]
+            img = np.swapaxes(img, 0, 2)
+            img = resize(img, [self.image_shape[2], self.image_shape[1]], mode='reflect')
+            img = np.swapaxes(img, 0, 2)
+        self.current_image[a] = np.copy(img)
+
+
+
     def update_frame_writeout(self):
         """Method to update the experimental state of the cifar10 interface.
         """
         # Update sampling mode.
-        if self.mode is None:
-            self.mode = self.dat["parameter"]["mode"]
         if self.mode != self.dat["parameter"]["mode"]:
             self.mode = self.dat["parameter"]["mode"]
             self.mode_shuffle = {}
@@ -356,45 +440,7 @@ class ProcessIf_cifar10(ProcessIf):
             self.current_elapsed[a] += 1
             # Check for end of frame.
             if self.current_elapsed[a] > self.current_duration[a]:
-                # Set back elapsed.
-                self.current_elapsed[a] = 0
-                self.current_duration[a] \
-                    = np.random.randint(self.dat["parameter"]["min_duration"],
-                                        self.dat["parameter"]["max_duration"] + 1)
-                # Dependent on presentations of this next frame, 
-                # init its parameters.
-                if self.mode in [0, 1]:
-                    if a > self.split:
-                        self.current_sample[a] = np.random.randint(0, self.samples['train'] - 1)
-                    else:
-                        self.current_sample[a] = np.random.randint(0, self.samples['valid'] - 1)
-                elif self.mode == 2:
-                    if a > self.split:
-                        self.current_sample[a] = self.mode_shuffle['train'][self.mode_current['train']]
-                        self.mode_current['train'] += 1
-                        if self.mode_current['train'] >= self.samples['train']:
-                            self.mode_shuffle['train'] = np.random.permutation(self.samples['train'])
-                            self.mode_current['train'] = 0
-                            self.dat["variables"]["_epoch_trigger_"][0] = 1
-                    else:
-                        self.current_sample[a] = self.mode_shuffle['valid'][self.mode_current['valid']]
-                        self.mode_current['valid'] += 1
-                        if self.mode_current['valid'] >= self.samples['valid']:
-                            self.mode_shuffle['valid'] = np.random.permutation(self.samples['valid'])
-                            self.cumm_conf_mat *= 0
-                            self.mode_current['valid'] = 0
-                            self.dat["variables"]["_epoch_trigger_"][1] = 1
-                elif self.mode == 3:
-                    self.current_sample[a] = self.mode_shuffle['test'][self.mode_current['test']]
-                    self.mode_current['test'] += 1
-                    if self.mode_current['test'] >= self.samples['test']:
-                        self.mode_shuffle['test'] = np.random.permutation(self.samples['test'])
-                        self.cumm_conf_mat *= 0
-                        self.mode_current['test'] = 0
-                        self.dat["variables"]["_epoch_trigger_"][2] = 1
-
-                # Set trigger for new stimulus.
-                self.dat["variables"]["_trigger_"][a] = 1
+                self.draw_new_sample(a)
 
             # Update internal data (= variables).
             # -----------------------------------------------------------------
@@ -410,43 +456,16 @@ class ProcessIf_cifar10(ProcessIf):
                 self.dat["variables"]["cf10_label"][a,current_label,0,0] = 1.0
             # Update image.
             if "cf10_image" in self.p["out"]:
-                # Determine fading factor.
+                # Apply fading factor.
                 if self.current_elapsed[a] < self.dat["parameter"]["fading"]:
                     ff = float(self.current_elapsed[a]) / float(self.dat["parameter"]["fading"])
-                    if self.mode in [0, 1, 2]:
-                        if a > self.split:
-                            self.dat["variables"]["cf10_image"][a,:,:,:] \
-                                = ff * self.dataset['train']["cf10_image"][self.current_sample[a],:,:,:]
-                        else:
-                            self.dat["variables"]["cf10_image"][a,:,:,:] \
-                                = ff * self.dataset['valid']["cf10_image"][self.current_sample[a],:,:,:]
-                    elif self.mode == 3:
-                        self.dat["variables"]["cf10_image"][a,:,:,:] \
-                            = ff * self.dataset['test']["cf10_image"][self.current_sample[a],:,:,:]
                 elif self.current_duration[a] - self.current_elapsed[a] < self.dat["parameter"]["fading"]:
                     ff = float(self.current_duration[a] - self.current_elapsed[a]) \
                          / float(self.dat["parameter"]["fading"])
-                    if self.mode in [0, 1, 2]:
-                        if a > self.split:
-                            self.dat["variables"]["cf10_image"][a,:,:,:] \
-                                = ff * self.dataset['train']["cf10_image"][self.current_sample[a],:,:,:]
-                        else:
-                            self.dat["variables"]["cf10_image"][a,:,:,:] \
-                                = ff * self.dataset['valid']["cf10_image"][self.current_sample[a],:,:,:]
-                    elif self.mode == 3:
-                        self.dat["variables"]["cf10_image"][a,:,:,:] \
-                            = ff * self.dataset['test']["cf10_image"][self.current_sample[a],:,:,:]
                 else:
-                    if self.mode in [0, 1, 2]:
-                        if a > self.split:
-                            self.dat["variables"]["cf10_image"][a,:,:,:] \
-                                = self.dataset['train']["cf10_image"][self.current_sample[a],:,:,:]
-                        else:
-                            self.dat["variables"]["cf10_image"][a,:,:,:] \
-                                = self.dataset['valid']["cf10_image"][self.current_sample[a],:,:,:]
-                    elif self.mode == 3:
-                        self.dat["variables"]["cf10_image"][a,:,:,:] \
-                            = self.dataset['test']["cf10_image"][self.current_sample[a],:,:,:]
+                    ff = 1.0
+                # Apply augmentation.
+                self.dat["variables"]["cf10_image"][a,:,:,:] = ff * self.current_image[a]
 
         # Update (if needed) the confusion matrix variable.
         # -----------------------------------------------------------------

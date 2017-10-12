@@ -3,7 +3,7 @@
 statestream
 ===========
 
-Statestream is an experimental toolbox for [streaming](docs/from_one_frame_to_the_next.md) networks. 
+Statestream is an experimental toolbox for [streaming](docs/from_one_frame_to_the_next.md) (also synchronous layerwise-parallel) networks. 
 It provides tools to easily specify, train, visualize and manipulate streaming neuronal networks.
 
 This software is a research prototype and not ready for production use. It has neither been developed nor

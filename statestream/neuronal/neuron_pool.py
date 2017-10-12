@@ -268,33 +268,42 @@ class NeuronPool(object):
                 # ------------------------------------------------------------
                 if self.bias_shape == "full":
                     if self.bias_unshare:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] \
-                                                                   + self.dat["parameter"]["b"].dimshuffle(0, 1, 2, 3)))
+                        self.state_AB.append(self.state_SUM[-1] \
+                            + self.dat["parameter"]["b"].dimshuffle(0, 1, 2, 3))
                     else:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] \
-                                                                   + self.dat["parameter"]["b"].dimshuffle("x", 0, 1, 2)))
+                        self.state_AB.append(self.state_SUM[-1] \
+                            + self.dat["parameter"]["b"].dimshuffle("x", 0, 1, 2))
                 elif self.bias_shape == "feature":
                     if self.bias_unshare:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] \
-                                                                   + self.dat["parameter"]["b"].dimshuffle(0, 1, "x", "x")))
+                        self.state_AB.append(self.state_SUM[-1] \
+                            + self.dat["parameter"]["b"].dimshuffle(0, 1, "x", "x"))
                     else:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] \
-                                                                   + self.dat["parameter"]["b"].dimshuffle("x", 0, "x", "x")))
+                        self.state_AB.append(self.state_SUM[-1] \
+                            + self.dat["parameter"]["b"].dimshuffle("x", 0, "x", "x"))
                 elif self.bias_shape == "spatial":
                     if self.bias_unshare:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] \
-                                                                   + self.dat["parameter"]["b"].dimshuffle(0, "x", 1, 2)))
+                        self.state_AB.append(self.state_SUM[-1] \
+                            + self.dat["parameter"]["b"].dimshuffle(0, "x", 1, 2))
                     else:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] \
-                                                                   + self.dat["parameter"]["b"].dimshuffle("x", "x", 0, 1)))
+                        self.state_AB.append(self.state_SUM[-1] \
+                            + self.dat["parameter"]["b"].dimshuffle("x", "x", 0, 1))
                 elif self.bias_shape == "scalar":
                     if self.bias_unshare:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] \
-                                                                   + self.dat["parameter"]["b"][:,0].dimshuffle(0, "x", "x", "x")))
+                        self.state_AB.append(self.state_SUM[-1] \
+                            + self.dat["parameter"]["b"][:,0].dimshuffle(0, "x", "x", "x"))
                     else:
-                        self.state_AB.append(eval(self.activation)(self.state_SUM[-1] + self.dat["parameter"]["b"][0]))
+                        self.state_AB.append(self.state_SUM[-1] + self.dat["parameter"]["b"][0])
                 else:
-                    self.state_AB.append(eval(self.activation)(self.state_SUM[-1]))
+                    self.state_AB.append(self.state_SUM[-1])
+
+                try:
+                    self.state_AB[-1] = eval(self.activation)(self.state_AB[-1])
+                except:
+                    try:
+                        activation = self.activation.replace('#', 'self.state_AB[-1]')
+                        self.state_AB[-1] = eval(activation)
+                    except:
+                        print("\nError: Unable to evaluate activation function: " + str(self.activation))
 
                 # Sparcify state no activation. (Theano version dependent)
                 # if self.sparsify == 0:
