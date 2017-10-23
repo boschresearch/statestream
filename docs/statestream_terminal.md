@@ -13,6 +13,8 @@ Available commands
 * **clean on/off**: Switch display mode for statestream terminal. In clean mode, the screen is cleared. For debugging
 purposes it is sometimes useful to set clean off.
 
+* **cstat**: Print some information about parallel processes.
+
 * **exit**: Exit everything. This is the clean way to shutdown statestream.
 
 * **?/help**: Print available commands.
@@ -24,8 +26,6 @@ purposes it is sometimes useful to set clean off.
 * **period** [PID (int)] [period (int)]: This will set the period of the process PID to the specified period. Please see [temporal controls](temporal_controls.md) for further details.
 
 * **profile core**: Prints some profiling information for the core process.
-
-* **pstate**: Print some information about parallel processes.
 
 * **savegraph**: Saves only the network graph to a **.st_graph** file.
 

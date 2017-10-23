@@ -895,7 +895,7 @@ class StateStream(object):
                     self.shutdown = True
                 elif self.terminal_command in ["profile core", "state", "nps", "sps", "ccs", "?", "help"]:
                     self.terminal_current_show = copy.copy(self.terminal_command)
-                elif self.terminal_command.startswith('pstate'):
+                elif self.terminal_command.startswith('cstat'):
                     self.terminal_current_show = copy.copy(self.terminal_command)
                 elif self.terminal_command == "viz off":
                     if self.IPC_PROC["gui flag"].value == 1:
@@ -1044,7 +1044,7 @@ class StateStream(object):
                               + str(np.mean(self.profiler_core_overall)) + " +- " \
                               + str(np.max(np.abs(self.profiler_core_overall \
                                                 - np.mean(self.profiler_core_overall)))))
-                    elif self.terminal_current_show.startswith("pstate"):
+                    elif self.terminal_current_show.startswith("cstat"):
                         if len(self.terminal_current_show.split()) == 2:
                             lines = int(self.terminal_current_show.split()[1])
                         else:
@@ -1155,7 +1155,7 @@ class StateStream(object):
                         print("        period [PID] [new period]  Reset new period for process PID.")
                         print("        offset [PID] [new period]  Reset new offset for process PID.")
                         print("        profile core               Print some profiling info for core process.")
-                        print("        pstate (lines)             Print state of the first 'lines' item processes.")
+                        print("        cstat (lines)             Print state of the first 'lines' item processes.")
                         print("        savegraph [filename]       Save graph to yaml file.")
                         print("        savenet [filename]         Save network to yaml file.")
                         print("        shm. ...                   Introspect shared memory.")
@@ -1223,7 +1223,7 @@ class StateStream(object):
         self.terminal.reset_term()
         
         # Comment for the last line.
-        print("Core: Last line of code.")
+        print("Core: Last line of statestream code. Theano shutting down ...")
             
             
             
