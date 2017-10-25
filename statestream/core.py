@@ -18,10 +18,15 @@
 
 from __future__ import print_function
 
+import os
 import sys
 
+import statestream as sstream
+SSTREAMPATH=os.path.dirname(sstream.__file__)
+sys.argv = [os.path.abspath(a) for a in sys.argv]
+os.chdir(SSTREAMPATH)
+
 from time import sleep, gmtime, strftime, time
-import os
 import copy
 import multiprocessing as mp
 import numpy as np
