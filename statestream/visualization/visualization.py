@@ -231,8 +231,8 @@ class Visualization(object):
 
         # Options for right clicks.
         self.options = {
-            'np': ['state', 'edit'],
-            'sp': ['on/off', 'edit'],
+            'np': ['state'],
+            'sp': ['on/off'],
             'plast': ['on/off'],
             'if': ['if viz']
         }
