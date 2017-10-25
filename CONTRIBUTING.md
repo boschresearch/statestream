@@ -1,9 +1,9 @@
 # Contributing
 
 Want to contribute? Great! You can do so through the standard GitHub pull
-request model. For large contributions we do encourage you to file a ticket in
+request model. For large contributions, we do encourage you to file a ticket in
 the GitHub issues tracking system prior to any code development to coordinate
-with the statestream development team early in the process. The coding stype
+with the statestream development team early in the process. The coding style
 should loosely follow the [pep8 style guide](https://www.python.org/dev/peps/pep-0008/). 
 Coordinating up front helps to avoid frustration later on.
 
@@ -58,14 +58,14 @@ By making a contribution to this project, I certify that:
 With the sign-off in a commit message you certify that you authored the patch
 or otherwise have the right to submit it under an open source license. The
 procedure is simple: To certify above statestream Developer's Certificate of
-Origin 1.0 for your contribution just append a line
+Origin 1.0 for your contribution, just append a line
 
     Signed-off-by: Random J Developer <random@developer.example.org>
 
 to every commit message using your real name or your pseudonym and a valid
 email address.
 
-If you have set your `user.name` and `user.email` git configs you can
+If you have set your `user.name` and `user.email` git configs, you can
 automatically sign the commit by running the git-commit command with the `-s`
 option.  There may be multiple sign-offs if more than one developer was
 involved in authoring the contribution.
@@ -77,12 +77,12 @@ which is stored in an external repository.
 ### Individual vs. Corporate Contributors
 
 Often employers or academic institution have ownership over code that is
-written in certain circumstances, so please do due diligence to ensure that
+written under certain circumstances, so please do due diligence to ensure that
 you have the right to submit the code.
 
 If you are a developer who is authorized to contribute to statestream on
 behalf of your employer, then please use your corporate email address in the
-Signed-off-by tag. Otherwise please use a personal email address.
+Signed-off-by tag. Otherwise, please use a personal email address.
 
 ## Maintain Copyright holder / Contributor list
 
