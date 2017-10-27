@@ -3,8 +3,8 @@
 statestream
 ===========
 
-Statestream is an experimental toolbox for [streaming](docs/from_one_frame_to_the_next.md) (also synchronous layerwise-parallel) networks. 
-It provides tools to easily specify, train, visualize and manipulate streaming neuronal networks.
+Statestream is an experimental toolbox for [streaming](docs/from_one_frame_to_the_next.md) (synchronous layerwise-parallel) deep neural networks. 
+It provides tools to easily design, train, visualize, and manipulate streaming deep neural networks.
 
 This software is a research prototype and not ready for production use. It has neither been developed nor
 tested for a specific use case. However, the license conditions of the
@@ -31,8 +31,8 @@ Some cornerstones
 * Emphasis on [streaming](docs/from_one_frame_to_the_next.md) data and networks.
 * Emphasis on flexible and intuitive online visualization / manipulation of network states / parameters, etc.
 * Qualitative not quantitative exploration of new network architectures (first 50 percent vs. last 2 percent performance).
-* Emphasis on parallelism (processes, GPUs, soon restriced machines).
-* Suited for specific type of very large (numerous but small network modules/layers) recurrent neuronal networks.
+* Emphasis on parallelism (processes, GPUs, restriced across machines).
+* Suited for specific type of very large (numerous but small network modules/layers) recurrent neural networks.
 
 Implementation:
 
@@ -46,8 +46,8 @@ Differences to prominent DL-frameworks
 
 The statestream toolbox does not aim to improve over existing tools with respect to memory or computation efficiency but rather enables investigation of streaming networks and interact with them during runtime. In fact the statestream toolbox is much more memory / computation in-efficient than other existing tools.
 
-* **streaming**: The network parts process information in a frame based / model-parallel synchronized manner, where one frame can be interpreted as one-step rollout of a recurrent neuronal network. Hence, dependent on network architecture, it may take several (up to many) frames until information is processed by the network. Now states stream through the network. 
-* **separation of 'Layers'**: In contrast to most other deep learning toolkits, which decompose the network into layers, we try to emphasise the graph-nature of neuronal networks already in implementation. Hence, inside the statestream toolbox the network is decomposed in nodes (neuron pools, short np) and edges (synapse pools, short sp). While nps hold the state (a.k.a. feature maps) of the network, the sps define the transformations between those states. For both, nps and sps, trainable parameters can be specified (e.g. bias for nps, weights for sps).
+* **streaming**: The network parts process information in a frame based / model-parallel synchronized manner, where one frame can be interpreted as one-step rollout of a recurrent neural network. Hence, dependent on network architecture, it may take several (up to many) frames until information is processed by the network. Now states stream through the network. 
+* **separation of 'Layers'**: In contrast to most other deep learning toolkits, which decompose the network into layers, we try to emphasise the graph-nature of neural networks already in implementation. Hence, inside the statestream toolbox the network is decomposed in nodes (neuron-pools, short NP) and edges (synapse-pools, short SP). While NPs hold the state (a.k.a. feature maps) of the network, the SPs define the transformations between those states. For both, NPs and SPs, trainable parameters can be specified (e.g. bias for NPs, weights for SPs).
 * **local updates**: Due to its streaming nature for execution, losses and more general everything that changes parameters (in statestream these
 are called plasticities) are treated as separated parts of the network. While statestream also allows 'global' losses
 covering the entire network, it emphasises on 'local' plasticities, which rely only on information from small parts of the network to determine updates for small subset of parameters. 
@@ -58,7 +58,7 @@ Pros
 ----
 
 * (+) Enables streaming (consistently model-parallel) networks.
-* (+) Intuitive behavior of recurrent neuronal networks (no extra rollout).
+* (+) Intuitive behavior of recurrent neural networks (no extra rollout).
 * (+) Shared memory representation enables online visualization and manipulation of network behavior.
 * (+) Trivial parallelization across CPUs and GPUs due to model-parallelism.
 
