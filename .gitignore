@@ -1,0 +1,8 @@
+# Extentions
+*.pyc
+*.o
+*.so
+
+# Cache
+.cache
+

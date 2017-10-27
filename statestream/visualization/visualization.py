@@ -231,8 +231,8 @@ class Visualization(object):
 
         # Options for right clicks.
         self.options = {
-            'np': ['state', 'edit'],
-            'sp': ['on/off', 'edit'],
+            'np': ['state'],
+            'sp': ['on/off'],
             'plast': ['on/off'],
             'if': ['if viz']
         }
@@ -445,6 +445,9 @@ class Visualization(object):
         self.new_mv_list = []
         self.new_mv_subwins = []
 
+        # Begin with empty core communication queue.
+        self.core_comm_queue = []
+
         # Determine all available types for meta variables.
         local_path = os.path.dirname(os.path.abspath(__file__))
         local_files = os.listdir(local_path \
@@ -514,6 +517,24 @@ class Visualization(object):
         
 # =============================================================================
 
+    def update_core_comm_queue(self):
+        """Method to update communication to core.
+        """
+        if self.core_comm_queue:
+            if self.IPC_PROC["save/load"].value == 0 \
+                    and self.IPC_PROC["instruction"].value == 0:
+                msg = self.core_comm_queue[0]
+                core_string = np.array([ord(c) for c in msg['instruction string']])
+                self.IPC_PROC['instruction len'].value = len(core_string)
+                self.IPC_PROC['string'][0:len(core_string)] = core_string[:]
+                if 'save/load' in msg:
+                    self.IPC_PROC["save/load"].value = copy.copy(msg['save/load'])
+                elif 'instruction' in msg:
+                    self.IPC_PROC["instruction"].value = copy.copy(msg['instruction'])
+                self.core_comm_queue.pop(0)
+
+# =============================================================================
+
     def add_meta_variable(self, mv_type=None, mv_param=[], selected_values=[], blitted=[], itemized=False):
         '''Add specified meta variable.
         '''
@@ -541,11 +562,10 @@ class Visualization(object):
             dump_yaml(client_param, outfile)
 
         # Send instruction to core to instantiate new system client.
-        instruction = 'register_sys_client'
-        core_string = np.array([ord(c) for c in instruction])
-        self.IPC_PROC['instruction len'].value = len(core_string)
-        self.IPC_PROC['string'][0:len(core_string)] = core_string[:]
-        self.IPC_PROC['instruction'].value = 1
+        core_comm = {}
+        core_comm['instruction string'] = 'register_sys_client'
+        core_comm['instruction'] = 1
+        self.core_comm_queue.append(copy.deepcopy(core_comm))
         mv_construct \
             = getattr(importlib.import_module('statestream.meta.system_clients.' \
                                               + mv_type), mv_type)
@@ -963,11 +983,10 @@ class Visualization(object):
             command_line = "set " + ptype + " parameter " + param[0]["name"] \
                            + " " + param[0]["type"] + " " \
                            + str(param[0]["value"])
-            # Send command line to core.
-            core_string = np.array([ord(c) for c in command_line])
-            self.IPC_PROC['instruction len'].value = len(core_string)
-            self.IPC_PROC['string'][0:len(core_string)] = core_string[:]
-            self.IPC_PROC['instruction'].value = 1
+            core_comm = {}
+            core_comm['instruction string'] = copy.copy(command_line)
+            core_comm['instruction'] = 1
+            self.core_comm_queue.append(copy.deepcopy(core_comm))
         elif modus == "save model comment":
             # Save entire current model.
             # Define save path.
@@ -982,10 +1001,10 @@ class Visualization(object):
                 model_name += ".st_net"
             # Generate global save file name.
             save_filename = save_path + os.sep + model_name
-            core_string = np.array([ord(c) for c in save_filename])
-            self.IPC_PROC['instruction len'].value = len(core_string)
-            self.IPC_PROC['string'][0:len(core_string)] = core_string[:]
-            self.IPC_PROC["save/load"].value = 1
+            core_comm = {}
+            core_comm['instruction string'] = copy.copy(save_filename)
+            core_comm['save/load'] = 1
+            self.core_comm_queue.append(copy.deepcopy(core_comm))
         elif modus == "edit param np":
             # Update edited net.
             self.edit_net["neuron_pools"][ptype]["act"] = str(param[0]["value"])
@@ -1295,7 +1314,8 @@ class Visualization(object):
             # Add all items with this tag to selection.
             for x, X in self.graph.items():
                 if selections[button_id] in self.net[S2L(X['type'])][x].get('tags', []):
-                    self.items_selected.append(x)
+                    if x not in self.items_selected:
+                        self.items_selected.append(x)
         elif modus == 'meta_var viz_sel var':
             # Select 'variable' and 'viz mode' for a meta-variable.
             # User has now selected the 'varialbe' and on the basis of this 'vars' shape
@@ -1357,11 +1377,10 @@ class Visualization(object):
             model_name = self.param["core"]["save_path"] + os.sep \
                          + self.net["name"] + os.sep \
                          + selections[button_id].replace(" ", "_") + ".st_net"
-            # Instruct core to load model.
-            core_string = np.array([ord(c) for c in model_name])
-            self.IPC_PROC['instruction len'].value = len(core_string)
-            self.IPC_PROC['string'][0:len(core_string)] = core_string[:]
-            self.IPC_PROC["save/load"].value = 2
+            core_comm = {}
+            core_comm['instruction string'] = copy.copy(model_name)
+            core_comm['save/load'] = 2
+            self.core_comm_queue.append(copy.deepcopy(core_comm))
 
 # =============================================================================
 
@@ -1702,23 +1721,20 @@ class Visualization(object):
         self.CM_CC = {}
         for cms in self.cm:
             colormap = np.array(matplotlib.pyplot.get_cmap(cms)(np.arange(256) / 255))
+            self.CM_CC[cms] = np.copy(colormap)
+            self.CM_CC[cms][:,0] = colormap[:,2] * 255
+            self.CM_CC[cms][:,1] = colormap[:,1] * 255
+            self.CM_CC[cms][:,2] = colormap[:,0] * 255
+            self.CM_CC[cms] = self.CM_CC[cms].astype(np.int32)
             self.CM[cms] = colormap[:,:]
             if self.ccol:
                 self.CM_RAW[cms] = np.fliplr(((colormap[:,0] * 255).astype(np.int32) + \
                                (colormap[:,1] * 255).astype(np.int32) * 256 + \
                                (colormap[:,2] * 127).astype(np.int32) * 256 * 256)[np.newaxis, :])
-                self.CM_CC[cms] = np.copy(colormap)
-                self.CM_CC[cms][:,0] = colormap[:,2] * 255
-                self.CM_CC[cms][:,1] = colormap[:,1] * 255
-                self.CM_CC[cms][:,2] = colormap[:,0] * 255
-                self.CM_CC[cms] = self.CM_CC[cms].astype(np.int32)
             else:
-                self.CM_RAW[cms] = np.fliplr(((colormap[:,0] * 255).astype(np.int32) + \
+                self.CM_RAW[cms] = np.fliplr(((colormap[:,2] * 255).astype(np.int32) + \
                                (colormap[:,1] * 255).astype(np.int32) * 256 + \
-                               (colormap[:,2] * 255).astype(np.int32) * 256 * 256)[np.newaxis, :])
-                self.CM_CC[cms] = np.copy(colormap)
-                #self.CM_CC[cms][:,0], self.CM_CC[cms][:,2] = colormap[:,2], colormap[:,0]
-                self.CM_CC[cms] = (self.CM_CC[cms]).astype(np.int32)
+                               (colormap[:,0] * 255).astype(np.int32) * 256 * 256)[np.newaxis, :])
         # Get shared memory.
         self.shm = SharedMemory(self.net, 
                                 self.param,
@@ -2094,7 +2110,7 @@ class Visualization(object):
                     self.shm.update_sys_client()
             # Add system-clients for pending meta-variables.
             if len(self.new_mv_list) > 0 \
-                    and self.IPC_PROC['instruction'].value != 1:
+                    and self.IPC_PROC['instruction'].value == 0:
                 # Get name.
                 for p,P in enumerate(self.new_mv_list[0]['mv_param']):
                     if P["name"] == "name":
@@ -2141,7 +2157,7 @@ class Visualization(object):
 
 
             # Determine mouse over.
-            self.mouse_over = ['bg']
+            self.mouse_over = ['bg', None]
             # Determine if over item.
             for x,X in self.graph.items():
                 if X['rect'].collidepoint(POS):
@@ -2197,7 +2213,8 @@ class Visualization(object):
                                            int(abs(self.POS[1] - LMB_hold_origin[1])))
                         for x, X in self.graph.items():
                             if sel_rect.collidepoint(X['pos']):
-                                if x not in self.items_selected:
+                                if x not in self.items_selected \
+                                        and self.graph_type_viz_flag[X['type']]:
                                     self.items_selected.append(x)
                     # Reset LMB variables.
                     LMB_hold = False
@@ -2303,7 +2320,7 @@ class Visualization(object):
                             elif event.key == pg.K_r \
                                     and self.is_shift_pressed \
                                     and not self.is_ctrl_pressed \
-                                    and self.IPC_PROC['instruction'].value != 1 \
+                                    and self.IPC_PROC['instruction'].value == 0 \
                                     and len(self.new_mv_list) == 0:
                                 # Read entire model via core.
                                 # Define save path.
@@ -2339,21 +2356,19 @@ class Visualization(object):
                                 # Re-init selection by sending instruction to core.
                                 if len(self.items_selected) == 0:
                                     # Re-init entire network.
-                                    instruction = np.array([ord(c) for c in "init"])
-                                    self.IPC_PROC['instruction len'].value \
-                                        = len(instruction)
-                                    self.IPC_PROC['string'][0:len(instruction)] \
-                                        = instruction[:]
-                                    self.IPC_PROC['instruction'].value = 1
+                                    core_comm = {}
+                                    core_comm['instruction string'] = "init"
+                                    core_comm['instruction'] = 1
+                                    self.core_comm_queue.append(copy.deepcopy(core_comm))
                                 else:
                                     # Determine proc ids of all selected items.
                                     instruction_str = "init"
                                     for i in self.items_selected:
                                         instruction_str += " " + str(self.shm.proc_id[i][0])
-                                    instruction = np.array([ord(c) for c in instruction_str])
-                                    self.IPC_PROC['instruction len'].value = len(instruction)
-                                    self.IPC_PROC['string'][0:len(instruction)] = instruction[:]
-                                    self.IPC_PROC['instruction'].value = 1
+                                    core_comm = {}
+                                    core_comm['instruction string'] = instruction_str
+                                    core_comm['instruction'] = 1
+                                    self.core_comm_queue.append(copy.deepcopy(core_comm))
                             elif event.key == pg.K_t:
                                 # Check if mouse over item.
                                 if self.mouse_over[0] == "item":
@@ -2402,11 +2417,10 @@ class Visualization(object):
                                     with open(tmp_filename, "w+") as f:
                                         dump_yaml(self.edit_net, f)
                                     # Instruct core to re-build edited network.
-                                    instruction_str = "edit"
-                                    instruction = np.array([ord(c) for c in instruction_str])
-                                    self.IPC_PROC['instruction len'].value = len(instruction)
-                                    self.IPC_PROC['string'][0:len(instruction)] = instruction[:]
-                                    self.IPC_PROC['instruction'].value = 1
+                                    core_comm = {}
+                                    core_comm['instruction string'] = "edit"
+                                    core_comm['instruction'] = 1
+                                    self.core_comm_queue.append(copy.deepcopy(core_comm))
                                     # Set back internal edit mode.
                                     self.edited_items = []
                                     self.edit_net = None
@@ -2745,24 +2759,22 @@ class Visualization(object):
                 for mv,MV in enumerate(self.meta_variables):
                     if MV.rects['close'].collidepoint(POS):
                         # Instruct core to shutdown system client.
-                        instruction = "remove_sys_client " + MV.name
-                        core_string = np.array([ord(c) for c in instruction])
-                        self.IPC_PROC['instruction len'].value = len(core_string)
-                        self.IPC_PROC['string'][0:len(core_string)] = core_string[:]
-                        self.IPC_PROC['instruction'].value = 1
+                        core_comm = {}
+                        core_comm['instruction string'] \
+                            = "remove_sys_client " + MV.name
+                        core_comm['instruction'] = 1
+                        self.core_comm_queue.append(copy.deepcopy(core_comm))
                         # Remove meta-variables subwin.
                         while MV.SW:
                             self.delete_subwindow(MV.SW[0])
                         # Remove meta-variable from list.
                         del self.meta_variables[mv]
                         LMB_click = False
-                        break
                     elif MV.rects['itemize'].collidepoint(POS):
                         # Switch itemizeable mode if possible.
                         if MV.itemable > 0:
                             MV.itemized = (MV.itemized + 1) % MV.itemable
                         LMB_click = False
-                        break
                     elif MV.rects['name'].collidepoint(POS):
                         # Select all children.
                         self.items_selected = []
@@ -2770,7 +2782,6 @@ class Visualization(object):
                             if I[0] not in self.items_selected:
                                 self.items_selected.append(I[0])
                         LMB_click = False
-                        break
                     elif MV.rects['viz'].collidepoint(POS):
                         # Open menue of available 'variables' for this meta-variable.
                         selection = []
@@ -2795,6 +2806,7 @@ class Visualization(object):
                                             modus='meta_var viz_sel var',
                                             cb_LMB_clicked=self.cb_selection_window_click)
                         LMB_click = False
+                    if not LMB_click:
                         break
 
             # If nothing clicked, clear selection.
@@ -3037,11 +3049,10 @@ class Visualization(object):
                             if mv_param[p]['name'] in MV.parameter:
                                 mv_param[p]['default'] = MV.parameter[mv_param[p]['name']]
                         # Delete clicked on meta variable.
-                        instruction = "remove_sys_client " + MV.name
-                        core_string = np.array([ord(c) for c in instruction])
-                        self.IPC_PROC['instruction len'].value = len(core_string)
-                        self.IPC_PROC['string'][0:len(core_string)] = core_string[:]
-                        self.IPC_PROC['instruction'].value = 1
+                        core_comm = {}
+                        core_comm['instruction string'] = "remove_sys_client " + MV.name
+                        core_comm['instruction'] = 1
+                        self.core_comm_queue.append(copy.deepcopy(core_comm))
                         # Remove meta-variables subwin.
                         while MV.SW:
                             self.delete_subwindow(MV.SW[0])
@@ -3403,43 +3414,62 @@ class Visualization(object):
             # Graph overview: Draw items and their connections.
             # =================================================================
             self.viz_prof_start["draw connections"] = time.time()
-            # Draw all connection.
+            # Draw all inter-item connections.
+            items_drawn = False
+            if self.mouse_over[0] == 'item':
+                if self.graph[self.mouse_over[1]]['type'] == 'np':
+                    for x,X in self.graph.items():
+                        if X['type'] == 'sp':
+                            if self.net['synapse_pools'][x]['target'] == self.mouse_over[1]:
+                                conn_col = (255, 200, 200)
+                        elif X['type'] == 'np':
+                            pass
+            if not items_drawn:
+                conn_col = (127, 127, 127)
+                for x,X in self.graph.items():
+                    # Draw all np-sp-np connections.
+                    if self.conn_type_viz_flag['sp'] and X['type'] == 'sp':
+                        if not self.graph_type_viz_flag['sp'] \
+                                and len(self.net['synapse_pools'][x]['source']) == 1 \
+                                and len(self.net['synapse_pools'][x]['source'][0]) == 1:
+                            source = self.net['synapse_pools'][x]['source'][0][0]
+                            target = self.net['synapse_pools'][x]['target']
+                            draw_dashed_line(self.screen, 
+                                             self.cc(conn_col), 
+                                             np.array([self.graph[source]['pos'][0], 
+                                                       self.graph[source]['pos'][1]]), 
+                                             np.array([self.graph[target]['pos'][0], 
+                                                       self.graph[target]['pos'][1]]), 
+                                             width=2,
+                                             dash=self.dash_size, 
+                                             offset=(current_frame % 32) / 16.0,
+                                             dash_type=1)
+                        else:
+                            for c in X['in']:
+                                if self.graph[c]['type'] == 'np':
+                                    draw_dashed_line(self.screen, 
+                                                     self.cc(conn_col), 
+                                                     np.array([self.graph[c]['pos'][0], 
+                                                               self.graph[c]['pos'][1]]), 
+                                                     np.array([X['pos'][0], X['pos'][1]]), 
+                                                     width=2, 
+                                                     dash=self.dash_size, 
+                                                     offset=(current_frame % 32) / 16.0,
+                                                     dash_type=1)
+                            for c in X['out']:
+                                if self.graph[c]['type'] == 'np':
+                                    draw_dashed_line(self.screen, 
+                                                     self.cc(conn_col), 
+                                                     np.array([X['pos'][0], X['pos'][1]]), 
+                                                     np.array([self.graph[c]['pos'][0], 
+                                                               self.graph[c]['pos'][1]]), 
+                                                     width=2, 
+                                                     dash=self.dash_size, 
+                                                     offset=(current_frame % 32) / 16.0,
+                                                     dash_type=1)
+
+            # Draw all for sub-windows, ifs and plasts.
             for x,X in self.graph.items():
-                # Draw all np-sp-np connections.
-                if self.conn_type_viz_flag['sp'] and X['type'] == 'sp':
-                    if not self.graph_type_viz_flag['sp'] and len(self.net['synapse_pools'][x]['source']) == 1 \
-                            and len(self.net['synapse_pools'][x]['source'][0]) == 1:
-                        source = self.net['synapse_pools'][x]['source'][0][0]
-                        target = self.net['synapse_pools'][x]['target']
-                        draw_dashed_line(self.screen, 
-                                         self.cc((127,127,127)), 
-                                         np.array([self.graph[source]['pos'][0], self.graph[source]['pos'][1]]), 
-                                         np.array([self.graph[target]['pos'][0], self.graph[target]['pos'][1]]), 
-                                         width=2,
-                                         dash=self.dash_size, 
-                                         offset=(current_frame % 32) / 16.0,
-                                         dash_type=1)
-                    else:
-                        for c in X['in']:
-                            if self.graph[c]['type'] == 'np':
-                                draw_dashed_line(self.screen, 
-                                                 self.cc((127,127,127)), 
-                                                 np.array([self.graph[c]['pos'][0], self.graph[c]['pos'][1]]), 
-                                                 np.array([X['pos'][0], X['pos'][1]]), 
-                                                 width=2, 
-                                                 dash=self.dash_size, 
-                                                 offset=(current_frame % 32) / 16.0,
-                                                 dash_type=1)
-                        for c in X['out']:
-                            if self.graph[c]['type'] == 'np':
-                                draw_dashed_line(self.screen, 
-                                                 self.cc((127,127,127)), 
-                                                 np.array([X['pos'][0], X['pos'][1]]), 
-                                                 np.array([self.graph[c]['pos'][0], self.graph[c]['pos'][1]]), 
-                                                 width=2, 
-                                                 dash=self.dash_size, 
-                                                 offset=(current_frame % 32) / 16.0,
-                                                 dash_type=1)
                 # Draw all subwindow connections.
                 if self.conn_type_viz_flag['sw']:
                     for sw,SW in enumerate(X['sw']):
@@ -3856,14 +3886,14 @@ class Visualization(object):
                             int(x), 
                             int(y), 
                             16, 
-                            fill_col=(128, 220, 220))
+                            fill_col=self.cc((128, 220, 220)))
                 x = self.vparam['screen_width'] - 60 + 16 * np.cos(a + np.pi)
                 y = 60 + 16 * np.sin(a + np.pi)
                 plot_circle(self.screen,
                             int(x), 
                             int(y), 
                             16, 
-                            fill_col=(128, 220, 220))
+                            fill_col=self.cc((128, 220, 220)))
                 self.all_up_current = (self.all_up_current + 1) % self.vparam['FPS']
             # =================================================================
 
@@ -3931,13 +3961,13 @@ class Visualization(object):
                                         int(X0 + px), 
                                         int(Y0 + py), 
                                         5, 
-                                        fill_col=DEFAULT_COLORS['light'])
+                                        fill_col=self.cc(DEFAULT_COLORS['light']))
                         else:
                             plot_circle(self.screen,
                                         int(X0 + px), 
                                         int(Y0 + py), 
                                         3, 
-                                        fill_col=self.graph_col[X['type']])
+                                        fill_col=self.cc(self.graph_col[X['type']]))
                 # Blit cross for current mouse position.
                 px = fx * (self.POS[0] - min_item_pos[0])
                 py = fy * (self.POS[1] - min_item_pos[1])
@@ -4030,6 +4060,9 @@ class Visualization(object):
 
             # Flip display.
             pg.display.flip()
+
+            # Update core communication queue.
+            self.update_core_comm_queue()
             
             # Maintain frames per seconds delay.
             clock.tick(self.vparam['FPS'])

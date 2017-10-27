@@ -18,10 +18,15 @@
 
 from __future__ import print_function
 
+import os
 import sys
 
+import statestream as sstream
+SSTREAMPATH=os.path.dirname(sstream.__file__)
+sys.argv = [os.path.abspath(a) for a in sys.argv]
+os.chdir(SSTREAMPATH)
+
 from time import sleep, gmtime, strftime, time
-import os
 import copy
 import multiprocessing as mp
 import numpy as np
@@ -236,6 +241,7 @@ class StateStream(object):
 
         # Create identifier for every item that needs a process.
         self.proc_id = {}
+        self.proc_name = {}
         self.proc_type = {}
         self.device = {}
         self.bottleneck = {}
@@ -245,6 +251,7 @@ class StateStream(object):
                 for i,I in self.net[mn.S2L(t)].items():
                     self.shm.proc_id[i][0] = current_id
                     self.proc_id[i] = int(current_id)
+                    self.proc_name[int(current_id)] = copy.copy(i)
                     self.proc_type[i] = t
                     self.IPC_PROC["period"][current_id].value = I.get("period", 1)
                     self.IPC_PROC["period offset"][current_id].value = I.get("period offset", 0)
@@ -343,6 +350,7 @@ class StateStream(object):
         proc_id = self.get_free_proc_id()
         # Append to some housekeeping structures.
         self.proc_id[client_param['name']] = proc_id
+        self.proc_name[proc_id] = client_param['name']
         self.proc_type[client_param['name']] = 'client'
         self.device[client_param['name']] = client_param.get('device', 'cpu')
         self.bottleneck[client_param['name']] = client_param.get('bottleneck', -1)
@@ -377,6 +385,10 @@ class StateStream(object):
             # Send specific terminasion signal to client process.
             self.IPC_PROC["pid"][self.proc_id[client_name]].value = -1
             self.proc[client_name].join()
+            for p_id, p_name in self.proc_name.items():
+                if p_name == client_name:
+                    self.proc_name.pop(p_id)
+                    break
             self.proc_id.pop(client_name)
             self.proc_type.pop(client_name)
             self.device.pop(client_name)
@@ -747,18 +759,16 @@ class StateStream(object):
                     # Before READING, check for load / save.
                     # Save network (everything) to file.
                     if self.IPC_PROC["save/load"].value == 1:
-                        # Set back IPC.
-                        self.IPC_PROC["save/load"].value = 0
                         # Get save file name and save model.
                         ascii_str = copy.copy(self.IPC_PROC["string"][0:255])
                         str_len = int(self.IPC_PROC["instruction len"].value)
                         saveFile = "".join([chr(int(ascii_str[i])) for i in range(str_len)])
+                        # Set back IPC.
+                        self.IPC_PROC["save/load"].value = 0
                         save_network(save_file=saveFile, 
                                      net=copy.deepcopy(self.net), 
                                      shm=self.shm)
                     elif self.IPC_PROC["save/load"].value == 2:
-                        # Set back IPC.
-                        self.IPC_PROC["save/load"].value = 0
                         # Dependent on load source, get loadList.
                         loadList = None
                         if self.flag_load_at_start:
@@ -772,6 +782,8 @@ class StateStream(object):
                             loadFile = "".join([chr(int(ascii_str[i])) for i in range(int(self.IPC_PROC["instruction len"].value))])
                             with open(loadFile, "rb") as f:
                                 loadList = pckl.load(f)
+                        # Set back IPC.
+                        self.IPC_PROC["save/load"].value = 0
                         # Now, if loadList is available copy everything.
                         if loadList is not None:
                             # Load states only if same number of agents.
@@ -886,7 +898,9 @@ class StateStream(object):
                         self.IPC_PROC["gui flag"].value = 2
                         self.gui_shutdown = True
                     self.shutdown = True
-                elif self.terminal_command in ["profile core", "state", "pstate", "nps", "sps", "ccs", "?", "help"]:
+                elif self.terminal_command in ["profile core", "state", "nps", "sps", "ccs", "?", "help"]:
+                    self.terminal_current_show = copy.copy(self.terminal_command)
+                elif self.terminal_command.startswith('cstat'):
                     self.terminal_current_show = copy.copy(self.terminal_command)
                 elif self.terminal_command == "viz off":
                     if self.IPC_PROC["gui flag"].value == 1:
@@ -1035,8 +1049,12 @@ class StateStream(object):
                               + str(np.mean(self.profiler_core_overall)) + " +- " \
                               + str(np.max(np.abs(self.profiler_core_overall \
                                                 - np.mean(self.profiler_core_overall)))))
-                    elif self.terminal_current_show == "pstate":
-                        print("\n\n")
+                    elif self.terminal_current_show.startswith("cstat"):
+                        if len(self.terminal_current_show.split()) == 2:
+                            lines = int(self.terminal_current_show.split()[1])
+                        else:
+                            lines = 256
+                        print("\n")
                         print("    " + "id".ljust(4) \
                               + "name".ljust(18) \
                               + "type".ljust(8) \
@@ -1045,9 +1063,22 @@ class StateStream(object):
                               + "read".ljust(8) \
                               + "write".ljust(8) \
                               + "period".ljust(8) \
-                              + "offset".ljust(8))
-                        print("\n")
+                              + "offset".ljust(8) \
+                              + "\n")
+                        # Sort by duration.
+                        durs = []
                         for p,p_id in self.proc_id.items():
+                            durs.append([-self.IPC_PROC['profiler'][p_id][0] \
+                                         - self.IPC_PROC['profiler'][p_id][1], p])
+                            durs[-1][0] *= self.IPC_PROC["period"][p_id].value
+                        idx = sorted((e[0], e[1]) for i,e in enumerate(durs))
+                        for i,p_dur_name in enumerate(idx):
+                            if i >= lines:
+                                print("    ... " + str(len(durs) - lines) \
+                                      + " more processes")
+                                break
+                            p = p_dur_name[1]
+                            p_id = self.proc_id[p]
                             prof = [copy.copy(self.IPC_PROC['profiler'][p_id][0]),
                                     copy.copy(self.IPC_PROC['profiler'][p_id][1])]
                             print("    " + str(p_id).ljust(4) \
@@ -1129,7 +1160,7 @@ class StateStream(object):
                         print("        period [PID] [new period]  Reset new period for process PID.")
                         print("        offset [PID] [new period]  Reset new offset for process PID.")
                         print("        profile core               Print some profiling info for core process.")
-                        print("        pstate                     Print state of all item processes.")
+                        print("        cstat (lines)             Print state of the first 'lines' item processes.")
                         print("        savegraph [filename]       Save graph to yaml file.")
                         print("        savenet [filename]         Save network to yaml file.")
                         print("        shm. ...                   Introspect shared memory.")
@@ -1197,7 +1228,7 @@ class StateStream(object):
         self.terminal.reset_term()
         
         # Comment for the last line.
-        print("Core: Last line of code.")
+        print("Core: Last line of statestream code. Theano shutting down ...")
             
             
             

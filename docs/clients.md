@@ -2,10 +2,10 @@ Clients
 =======
 ([back to documentation](README.md))
 
-Statestream provides two types of clients (_core_ and _system_ clients) to perform automated user defined actions during runtime. The major differences between core- and system-clients are:
+Statestream provides two types of clients (_core_ and _system_ clients) to perform automated user defined actions during runtime. The major differences between core and system-clients are:
 
-* Separate process (from core process): Core clients provide methods which called inside the core process while system clients run in a separate / parallel process.
-* Online parameter changes (e.g. learning rate schedule): Core clients may perform online parameter changes during runtime, system processes can not change the networks parameters.
+* Separate processes (from core process): Core clients provide methods which called inside the core process while system clients run in a separate / parallel process.
+* Online parameter changes (e.g. learning rate schedule): Core clients may perform online parameter changes during runtime, system processes can not change the network's parameters.
 * GPU backend: Core clients are not supposed to use the GPU backend, system clients are.
 
 
