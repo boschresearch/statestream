@@ -62,6 +62,7 @@ Specification parameters
 * **avgout**, **maxout** (type: int): Integer specifying a factor for the number of features used for maxout or avgout. The default is 1 for both and has no effect.
 * **ppp** (type: list(list(int))): A Pre-Processing Projection dimension for each source neuron-pool. This projection is a convolution with receptive field sizes equal to one, altering (pre-processing, selecting) the source's features. The default is 0 for all sources and ignores this pre-processing step.
 
+If **NOSPRING** is added as a tag for a SP, this SP will not enforce NP attraction forces in the main visualization.
 
 
 Provided parameter initializations

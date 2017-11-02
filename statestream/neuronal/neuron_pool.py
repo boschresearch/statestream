@@ -296,14 +296,14 @@ class NeuronPool(object):
                 else:
                     self.state_AB.append(self.state_SUM[-1])
 
-                try:
-                    self.state_AB[-1] = eval(self.activation)(self.state_AB[-1])
-                except:
+                if self.activation.find('$') != -1:
                     try:
-                        activation = self.activation.replace('#', 'self.state_AB[-1]')
+                        activation = self.activation.replace('$', 'self.state_AB[-1]')
                         self.state_AB[-1] = eval(activation)
                     except:
                         print("\nError: Unable to evaluate activation function: " + str(self.activation))
+                else:
+                    self.state_AB[-1] = eval(self.activation)(self.state_AB[-1])
 
                 # Sparcify state no activation. (Theano version dependent)
                 # if self.sparsify == 0:

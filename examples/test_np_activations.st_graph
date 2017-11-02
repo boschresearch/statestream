@@ -65,6 +65,12 @@ neuron_pools:
     np_gaussian:
         shape: [16, 16, 16]
         act: gaussian
+    np_explicit1:
+        shape: [16, 16, 16]
+        act: $**2
+    np_explicit2:
+        shape: [16, 16, 16]
+        act: T.exp($)
     image:
         shape: [1, 32, 32]
         tags: [sensor]
@@ -159,6 +165,18 @@ synapse_pools:
         source: 
         - [hidden]
         target: np_gaussian
+        init: id
+        rf: 1
+    sp_explicit1:
+        source: 
+        - [hidden]
+        target: np_explicit1
+        init: id
+        rf: 1
+    sp_explicit2:
+        source: 
+        - [hidden]
+        target: np_explicit2
         init: id
         rf: 1
 plasticities: {}
