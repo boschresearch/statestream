@@ -16,6 +16,7 @@ User interfaces
 	* [Keyboard shortcuts](hotkeys.md)
 	* [Network editing](editing.md) (under construction)
 	* [Meta variables](meta_variables.md)
+* [Rollout view](rollout_view.md)
 
 Advanced controls
 -----------------
