@@ -27,6 +27,8 @@ purposes it is sometimes useful to set clean off.
 
 * **profile core**: Prints some profiling information for the core process.
 
+* **rv on/off**: Activate / deactivate rollout view. In general, this works similar to the main visialization but provides a rudamentory rollout view of the deep neural network. Please see also the rollout-view [documentation](rollout_view.md).
+
 * **savegraph**: Saves only the network graph to a **.st_graph** file.
 
 * **savenet**: Saves the current state of the entire network (incl. neuron pool states, parameters, optimizer states).

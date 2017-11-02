@@ -1611,16 +1611,22 @@ class Visualization(object):
                 # Add meta variables.
                 for MV in graphview['meta_vars']:
                     sel_val = []
+                    mv_valid = True
                     for i in range(len(MV['values_child'])):
-                        sel_val.append((MV['values_child'][i], MV['values_value'][i]))
-                    mv = {}
-                    mv['mv_type'] = MV['type']
-                    mv['mv_param'] = MV['mv_params']
-                    mv['selected_values'] = sel_val
-                    if 'itemized' in MV:
-                        mv['itemized'] = MV['itemized']
-                    # Check for subwindow.
-                    self.new_mv_list.append(copy.deepcopy(mv))
+                        if MV['values_child'][i] not in self.graph:
+                            mv_valid = False
+                            break
+                        else:
+                            sel_val.append((MV['values_child'][i], MV['values_value'][i]))
+                    if mv_valid:
+                        mv = {}
+                        mv['mv_type'] = MV['type']
+                        mv['mv_param'] = MV['mv_params']
+                        mv['selected_values'] = sel_val
+                        if 'itemized' in MV:
+                            mv['itemized'] = MV['itemized']
+                        # Check for subwindow.
+                        self.new_mv_list.append(copy.deepcopy(mv))
 
                 # Add item / connection type visibility settings.
                 for i in self.graph_i:
@@ -1743,11 +1749,11 @@ class Visualization(object):
 
         # current visualization frame
         current_viz_frame = 0
-        # current neuronal frame (from ipc)
+        # current neural frame (from ipc)
         current_frame = 0
-        # previous neuronal frame
+        # previous neural frame
         last_frame = 0
-        # new neuronal frame flag
+        # new neural frame flag
         self.new_frame = False
         
         # Set all fonts.
@@ -2110,7 +2116,8 @@ class Visualization(object):
                     self.shm.update_sys_client()
             # Add system-clients for pending meta-variables.
             if len(self.new_mv_list) > 0 \
-                    and self.IPC_PROC['instruction'].value == 0:
+                    and self.IPC_PROC['instruction'].value == 0 \
+                    and self.all_up:
                 # Get name.
                 for p,P in enumerate(self.new_mv_list[0]['mv_param']):
                     if P["name"] == "name":

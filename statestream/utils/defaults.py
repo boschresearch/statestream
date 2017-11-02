@@ -61,6 +61,7 @@ DEFAULT_VIZ_PARAMETER = {
     'font small': 16,
     'font large': 20,
     'font huge': 24,
+    'rollout': 6,
     'subwindow_width': 512,
     'subwindow_height': 512
 }

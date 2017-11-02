@@ -213,6 +213,8 @@ class StateStream(object):
         self.IPC_PROC["gui request"] = mp.Array("d", [0, 0, 0, 0])
         self.IPC_PROC["gui pid"] = mp.Value("d", 0)
         self.IPC_PROC["gui flag"] = mp.Value("d", 0)
+        self.IPC_PROC["rvgui pid"] = mp.Value("d", 0)
+        self.IPC_PROC["rvgui flag"] = mp.Value("d", 0)
         self.IPC_PROC["core pid"] = mp.Value("d", 0)
         self.IPC_PROC["delay"] = mp.Value("d", 0)
         self.IPC_PROC["tmem time steps"] \
@@ -297,6 +299,7 @@ class StateStream(object):
         self.state = process_state["I"]
         self.shutdown = False
         self.gui_shutdown = False
+        self.rvgui_shutdown = False
 
         # Get keyboard control.
         self.terminal = Keyboard()
@@ -897,6 +900,10 @@ class StateStream(object):
                         # Send quit to gui.
                         self.IPC_PROC["gui flag"].value = 2
                         self.gui_shutdown = True
+                    if self.IPC_PROC["rvgui flag"].value == 1:
+                        # Sent quit to rollout view.
+                        self.IPC_PROC["rvgui flag"].value = 2
+                        self.rvgui_shutdown = True
                     self.shutdown = True
                 elif self.terminal_command in ["profile core", "state", "nps", "sps", "ccs", "?", "help"]:
                     self.terminal_current_show = copy.copy(self.terminal_command)
@@ -922,6 +929,26 @@ class StateStream(object):
                         self.proc_viz = mp.Process(target=self.inst_viz.run,
                                                    args=(self.IPC_PROC, None))
                         self.proc_viz.start()
+                elif self.terminal_command == "rv off":
+                    if self.IPC_PROC["rvgui flag"].value == 1:
+                        # Send quit to gui.
+                        self.IPC_PROC["rvgui flag"].value = 2
+                        self.rvgui_shutdown = True
+                elif self.terminal_command == "rv on":
+                    import statestream.visualization.rollout_view
+                    if self.IPC_PROC["rvgui flag"].value != 1:
+                        self.IPC_PROC["rvgui flag"].value = 1
+                        # Reload visualization python module.
+                        if sys.version[0] == "2":
+                            reload(statestream.visualization.rollout_view)
+                        elif sys.version[0] == "3":
+                            importlib.reload(statestream.visualization.rollout_view)
+                        from statestream.visualization.rollout_view import rollout_view
+                        # Create and start visualization process.
+                        self.inst_rv = rollout_view(self.net, self.param)
+                        self.proc_rv = mp.Process(target=self.inst_rv.run,
+                                                   args=(self.IPC_PROC, None))
+                        self.proc_rv.start()
                 elif self.terminal_command == "clean on":
                     self.terminal_clean = True
                 elif self.terminal_command == "clean off":
@@ -1184,6 +1211,13 @@ class StateStream(object):
                     self.proc_viz = None
                     self.inst_viz = None
                     self.gui_shutdown = False
+            if self.rvgui_shutdown:
+                # Wait for gui to return.
+                if self.IPC_PROC['rvgui flag'].value == 0: # 1
+                    self.proc_rv.join()
+                    self.proc_rv = None
+                    self.inst_rv = None
+                    self.rvgui_shutdown = False
 
             # Check for shutdown.
             if (self.IPC_PROC["gui request"][0] == 1 or self.shutdown) and not self.gui_shutdown:
