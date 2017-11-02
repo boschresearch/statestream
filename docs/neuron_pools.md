@@ -25,7 +25,7 @@ Specification parameters
 * **device** (type: string): Device type the neuron-pool should be executed on (e.g. cpu, gpu0).
 * **tags** (type: [str, .., str]): A list of tags for this neuron-pool.
 * **shape** (type: [int, int, int]):
-* **act** (type: str): An activation function for the output of this NP. Default is set to 'Id'. An arbitrary activation function can be provided, using the dollar sign $ as a placeholder (compare [text example](../example/test_np_activations.st_graph))
+* **act** (type: str): An activation function for the output of this NP. Default is set to 'Id'. An arbitrary activation function can be provided, using the dollar sign $ as a placeholder (compare [test example](../examples/test_np_activations.st_graph))
 * **noise** (type: str): A noise added after the activation of this NP. See the [noise terms](noise_terms.md) for further details.
 * **dropout** (type: float): The dropout rate used for this neuron-pool. Must be between zero and one.
 * **zoneout** (type: float): The zoneout rate used for this neuron-pool. Must be between zero and one. For now, zoneout only works for self-connected NPs, otherwise this parameter will be ignored.
