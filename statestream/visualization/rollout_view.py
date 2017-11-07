@@ -30,7 +30,12 @@ import matplotlib
 from statestream.utils.pygame_import import pg, pggfx
 from statestream.utils.yaml_wrapper import load_yaml, dump_yaml
 
-from statestream.meta.network import suggest_data, shortest_path, MetaNetwork
+from statestream.meta.network import suggest_data, \
+                                     shortest_path, \
+                                     MetaNetwork, \
+                                     compute_distance_matrix, \
+                                     get_the_input, \
+                                     clever_sort
 from statestream.meta.synapse_pool import sp_get_dict
 from statestream.meta.network import S2L
 
@@ -108,11 +113,9 @@ class rollout_view(object):
         self.item_size = int(1.2 * copy.copy(self.vparam['font small']))
         self.name_font = 'small'
         self.name_size = copy.copy(self.vparam['font ' + self.name_font])
-        self.row_height = 2 * self.name_size
         self.header_height = 100
         self.default_border = 1
         self.rollback_border = 4
-        self.rollback_size = self.row_height - 6
 
         # Flag for color correction (blue).
         self.ccol = self.vparam['color_correction']
@@ -133,15 +136,24 @@ class rollout_view(object):
                 self.max_input_len = no_inputs
         
         # Get rollout.
-        self.rollout = copy.copy(self.vparam['rollout'])
-        self.dt = 0
+        self.rollout = copy.copy(self.vparam.get('rollout', 6))
+        self.memory = copy.copy(self.vparam.get('memory', 2))
+        self.dt = copy.copy(self.vparam.get('dt', 0))
         self.screen_width = copy.copy(self.vparam['screen_width'])
         self.screen_height = copy.copy(self.vparam['screen_height'])
         
+        self.current_mem = 0
+
+        # Initially sort all NPs.
+        self.dm = compute_distance_matrix(self.net)
+        self.the_input = get_the_input(self.net, dist_mat=self.dm)
+        sorted_nps = clever_sort(self.net, self.the_input, the_input=self.the_input, dist_mat=self.dm)
+
         # List of dicts representation of network for drawing.
         self.list_rep = []
         self.dict_rep = {}
-        for n in net['neuron_pools']:
+        overall_Y = 0
+        for n in sorted_nps:
             rep = {}
             rep['name'] = copy.copy(n)
             rep['no_src_sps'] = 0
@@ -150,10 +162,15 @@ class rollout_view(object):
             rep['src_sps'] = []
             rep['src_nps'] = []
             rep['tgt_nps'] = []
+            rep['mode'] = 'item'
             rep['col'] = []
             rep['border'] = []
             rep['size'] = []
-            rep['Y'] = len(self.list_rep) * self.row_height
+            rep['row_height'] = 4 * self.name_size
+            rep['Y'] = copy.copy(overall_Y)
+            overall_Y += rep['row_height']
+            rep['mem'] = []
+            rep['surf'] = []
             # The next is a list over all rollouts of this item.
             rep['rect'] = []
             for s,S in net['synapse_pools'].items():
@@ -168,6 +185,9 @@ class rollout_view(object):
                     if src == n:
                         if src not in rep['tgt_nps']:
                             rep['tgt_nps'].append(S['target'])
+            for m in range(self.memory):
+                rep['mem'].append(np.zeros(net['neuron_pools'][n]['shape'], dtype=np.float32))
+                rep['surf'].append(None)
             for r in range(self.rollout + 1):
                 rep['rect'].append(pg.Rect(0, 0, 2, 2))
                 rep['col'].append(copy.copy(self.np_color))
@@ -175,10 +195,6 @@ class rollout_view(object):
                 rep['size'].append(copy.copy(self.item_size))
             self.dict_rep[n] = len(self.list_rep)
             self.list_rep.append(copy.deepcopy(rep))
-
-        
-        # First neuron-pool to be visualized and local (px) offset for nice drawing.
-        self.max_items = (self.screen_height - self.header_height) // (self.row_height)
 
         # This is the list of elected items.
         self.items_selected = []
@@ -195,7 +211,10 @@ class rollout_view(object):
         # Set rollout view save file.
         self.rollout_view_file = self.home_path + '/.statestream/rolloutview/' \
                                    + self.net['name'] + '-rolloutview'
-        
+
+        # Get colormap.
+        self.colormap = np.array(matplotlib.pyplot.get_cmap('magma')(np.arange(256) / 255))
+
 # =============================================================================
 
     def cc(self, col):
@@ -233,6 +252,8 @@ class rollout_view(object):
         # Generate rollout view dictionary.
         rollout_view = {}
         rollout_view['rollout'] = self.rollout
+        rollout_view['mem'] = self.memory
+        rollout_view['dt'] = self.dt
         filename = self.rollout_view_file + "-{:02d}".format(id)
         # Save rollout view.
         with open(filename, 'w') as outfile:
@@ -246,7 +267,9 @@ class rollout_view(object):
         if os.path.isfile(filename):
             with open(filename, 'r') as infile:
                 rv = load_yaml(infile)
-                self.rollout = copy.copy(rv['rollout'])
+                self.rollout = copy.copy(rv.get('rollout', 6))
+                self.memory = copy.copy(rv.get('mem', 2))
+                self.dt = copy.copy(rv.get('dt', 0))
 
 # =============================================================================
 
@@ -285,6 +308,58 @@ class rollout_view(object):
 
 # =============================================================================
 
+    def render_item(self, item_idx, mem):
+        """Renders the item once for efficient blitting.
+        """
+        dat = np.copy(self.list_rep[item_idx]['mem'][mem])
+        # Rescale entries.
+        dat = dat - np.min(dat)
+        m = np.max(dat)
+        if m > 1e-6:
+            dat = dat / m
+        shape = dat.shape
+        if shape[0] == 1 and shape[1] == 1 and shape[2] == 1:
+            pass
+        elif shape[0] not in [1, 3] and shape[1] != 1 and shape[2] == 1:
+            # [!1/3, >1, 1], general 1D feature map
+            img = np.swapaxes(dat, 0, 1).flatten()[:]
+            cgraphics_colorcode(img, shape[1], shape[0], self.colormap, int(self.ccol))
+            array = img.reshape([shape[1], shape[0]]).astype(np.int32)
+        elif shape[0] != 1 and shape[1] == 1 and shape[2] == 1:
+            # [>1], general 1D parameter vector
+            img = dat[:,0,0].flatten()[:].astype(np.double)
+            cgraphics_colorcode(img, shape[0], 1, self.colormap, int(self.ccol))
+            array = np.reshape(img, [1, shape[0]]).astype(np.int32)
+        elif shape[0] == 1 and shape[1] != 1:
+            # [1, >1, *]
+            img = dat[0,:,:].flatten()[:].astype(np.double)
+            cgraphics_colorcode(img, shape[1], shape[2], self.colormap, int(self.ccol))
+            array = img.reshape([shape[1], shape[2]]).astype(np.int32)
+        elif shape[0] != 1 and shape[1] != 1 and shape[2] != 1:
+            # [>1, >1, >1], general 2D feature map
+            # convert 3D feature map tensor to 2D image.
+            sub_shape_0 = int(np.ceil(np.sqrt(shape[0])))
+            sub_shape_1 = int(np.ceil(float(shape[0]) / sub_shape_0))
+            array_shape = [sub_shape_0 * shape[1],
+                           sub_shape_1 * shape[2]]
+            array_double = np.zeros(array_shape, dtype=np.double)
+            rearrange_3D_to_2D(dat, array_double, array_shape, [sub_shape_0, sub_shape_1])
+            img = array_double.flatten()[:]
+            cgraphics_colorcode(img, array_shape[0], array_shape[1], self.colormap, int(self.ccol))
+            array = img.astype(np.int32).reshape(array_shape)
+        elif shape[0] == 3 and shape[1] != 1 and shape[2] != 1:
+            # All RGB image visualizations.
+            array = (255 * dat[0,:,:]).astype(np.int32) + 256 * (dat[1,:,:] * 255).astype(np.int32) + 256*256 * (dat[2,:,:] * 127).astype(np.int32)
+
+        loc_buffer = pg.Surface([array.shape[0], array.shape[1]])
+        loc_buffer.convert()
+        pg.surfarray.blit_array(loc_buffer, array)
+        self.list_rep[item_idx]['surf'][mem] = pg.transform.scale(loc_buffer, 
+                                                                  [self.list_rep[item_idx]['row_height'], 
+                                                                   self.list_rep[item_idx]['row_height']])
+
+# =============================================================================
+
     def fade_color(self, src_col, tgt_col, factor):
         """Fades color between two colors.
         """
@@ -304,7 +379,8 @@ class rollout_view(object):
                 for src_np in src_sp_srcs:
                     self.list_rep[self.dict_rep[src_np]]['col'][rollout - 1] = copy.copy(self.rollback_valid_color)
                     self.list_rep[self.dict_rep[src_np]]['border'][rollout - 1] = copy.copy(self.rollback_border)
-                    self.list_rep[self.dict_rep[src_np]]['size'][rollout - 1] = copy.copy(self.rollback_size)
+                    self.list_rep[self.dict_rep[src_np]]['size'][rollout - 1] \
+                        = copy.copy(self.list_rep[self.dict_rep[item]]['row_height'] - 6)
                     self.change_item_color_recback(src_np, rollout - 1)
 
     def change_item_color_recforward(self, item, rollout):
@@ -314,7 +390,8 @@ class rollout_view(object):
             for tgt_np in self.list_rep[self.dict_rep[item]]['tgt_nps']:
                 self.list_rep[self.dict_rep[tgt_np]]['col'][rollout + 1] = copy.copy(self.rollback_valid_color)
                 self.list_rep[self.dict_rep[tgt_np]]['border'][rollout + 1] = copy.copy(self.rollback_border)
-                self.list_rep[self.dict_rep[tgt_np]]['size'][rollout + 1] = copy.copy(self.rollback_size)
+                self.list_rep[self.dict_rep[tgt_np]]['size'][rollout + 1] \
+                    = copy.copy(self.list_rep[self.dict_rep[item]]['row_height'] - 6)
                 self.change_item_color_recforward(tgt_np, rollout + 1)
 
 # =============================================================================
@@ -346,6 +423,31 @@ class rollout_view(object):
         '''System debug button was clicked (show some debug information).
         '''
         self.debug_flag = not self.debug_flag
+
+# =============================================================================
+
+    def cb_button_LMB_click_memory_plus(self):
+        """Increase rollout by one.
+        """
+        if self.memory < 16:
+            self.memory += 1
+            self.update_memory()
+    def cb_button_LMB_click_memory_minus(self):
+        """Decrease rollout by one.
+        """
+        if self.memory > 0:
+            self.memory -= 1
+            self.update_memory()
+    def update_memory(self):
+        """Reset and update memory structure.
+        """
+        self.current_mem = 0
+        for N in self.list_rep:
+            N['surf'] = []
+            N['mem'] = []
+            for m in range(self.memory):
+                N['surf'].append(pg.Surface([N['row_height'], N['row_height']]))
+                N['mem'].append(np.zeros(self.net['neuron_pools'][N['name']]['shape'], dtype=np.float32))
 
 # =============================================================================
 
@@ -381,6 +483,17 @@ class rollout_view(object):
 
 # =============================================================================
 
+    def cb_button_LMB_click_dt_plus(self):
+        """Increase dt by one.
+        """
+        self.dt += 1
+    def cb_button_LMB_click_dt_minus(self):
+        """Decrease dt by one.
+        """
+        self.dt -= 1
+
+# =============================================================================
+
 
 
     def run(self, IPC_PROC, dummy):
@@ -400,8 +513,10 @@ class rollout_view(object):
         background.fill(self.cc(self.vparam['background_color']))
         self.second_bg_col = (60,60,20,0)
 
-        transparent = pg.Surface(self.screen.get_size()).convert()
-        transparent.fill((100,0,0,150))
+        # Add surfaces for rollout view.
+        for N in self.list_rep:
+            for m in range(self.memory):
+                N['surf'][m] = pg.Surface([N['row_height'], N['row_height']])
 
         pg.mouse.set_visible(1)
         pg.key.set_repeat(1, 100)
@@ -498,6 +613,9 @@ class rollout_view(object):
             self.button_sprite[b] = pg.Surface([B[2], B[3]], pg.SRCALPHA, 32)
             self.button_sprite[b].fill((0,0,0,0))
             self.button_sprite[b].blit(button_surf, (0,0), area=B)
+        # Small left / right arrow sprite.
+        self.button_sprite['small right'] = pg.transform.scale(self.button_sprite['play'], [24, 24])
+        self.button_sprite['small left'] = pg.transform.flip(self.button_sprite['small right'], True, False)
 
         # Create widget collector.
         self.wcollector = Collector(self.screen, 
@@ -529,16 +647,31 @@ class rollout_view(object):
                 pos=np.asarray([X0 + 3 * 32, Y0], dtype=np.float32), 
                 cb_LMB_clicked=lambda: self.cb_button_LMB_click_debug())
         # Add plus / minus button for rollout.
-        self.buttons['rollout-minus'] = self.wcollector.add_button(None, sprite='minus', 
-                pos=np.asarray([400, Y0], dtype=np.float32), 
-                cb_LMB_clicked=lambda: self.cb_button_LMB_click_rollout_minus())
-        self.buttons['rollout-plus'] = self.wcollector.add_button(None, sprite='plus', 
+        self.buttons['rollout-minus'] = self.wcollector.add_button(None, sprite='small left', 
                 pos=np.asarray([550, Y0], dtype=np.float32), 
+                cb_LMB_clicked=lambda: self.cb_button_LMB_click_rollout_minus())
+        self.buttons['rollout-plus'] = self.wcollector.add_button(None, sprite='small right', 
+                pos=np.asarray([550 + 24, Y0], dtype=np.float32), 
                 cb_LMB_clicked=lambda: self.cb_button_LMB_click_rollout_plus())
+
+        self.buttons['memory-minus'] = self.wcollector.add_button(None, sprite='small left', 
+                pos=np.asarray([550, Y0 + 24], dtype=np.float32), 
+                cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_minus())
+        self.buttons['memory-plus'] = self.wcollector.add_button(None, sprite='small right', 
+                pos=np.asarray([550 + 24, Y0 + 24], dtype=np.float32), 
+                cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_plus())
+
+        self.buttons['dt-plus'] = self.wcollector.add_button(None, sprite='small left', 
+                pos=np.asarray([self.max_name_px // 2 - 40, self.header_height - 3 * self.name_size // 2 - 2], dtype=np.float32), 
+                cb_LMB_clicked=lambda: self.cb_button_LMB_click_dt_plus())
+        self.buttons['dt-minus'] = self.wcollector.add_button(None, sprite='small right', 
+                pos=np.asarray([self.max_name_px // 2 + 32, self.header_height - 3 * self.name_size // 2 - 2], dtype=np.float32), 
+                cb_LMB_clicked=lambda: self.cb_button_LMB_click_dt_minus())
 
         # Load potential rollout view settings.
         self.load_rollout_view()
         self.update_rollout()
+        self.update_memory()
 
         # Some timers
         timer_overall = np.ones([12])
@@ -590,12 +723,21 @@ class rollout_view(object):
                 self.new_frame = False
 
             # =================================================================
-            # Get all states.
+            # Get all process states.
             # =================================================================
             for X in self.list_rep:
                 X['state'] = self.IPC_PROC['state'][self.shm.proc_id[X['name']][0]].value
             # =================================================================
 
+            # =================================================================
+            # Update internal neural state memory.
+            # =================================================================
+            if self.new_frame and self.memory > 0:
+                self.current_mem = (self.current_mem + 1) % self.memory
+                for n,N in enumerate(self.list_rep):
+                    N['mem'][self.current_mem][:] = self.shm.dat[N['name']]['state'][0,:]
+                    self.render_item(n, self.current_mem)
+            # =================================================================
 
             
             # =================================================================
@@ -616,7 +758,6 @@ class rollout_view(object):
                         self.mouse_over = ['item', X['name'], r]
                         break
             # =================================================================
-
 
 
             # Update break / one-step buttons.
@@ -669,10 +810,6 @@ class rollout_view(object):
                         self.is_shift_pressed = False
                     elif event.key == pg.K_RCTRL or event.key == pg.K_LCTRL:
                         self.is_ctrl_pressed = False
-                    if not self.is_typing_command \
-                            and self.wcollector.active_textentry is None:
-                        if event.key == pg.K_g:
-                            self.hotkey_g = False
                 elif event.type == pg.KEYDOWN:
                     # Check set controll keys.
                     if event.key == pg.K_RSHIFT or event.key == pg.K_LSHIFT:
@@ -684,13 +821,6 @@ class rollout_view(object):
                             and self.wcollector.top_widget is None:
                         if event.key == pg.K_ESCAPE:
                             self.shutdown()
-                        elif event.key == pg.K_RETURN:
-                            if self.is_typing_command:
-                                self.is_typing_command = False
-                                self.perform_command = True
-                            else:
-                                self.is_typing_command = True
-                                self.command_line = ['']
                         elif event.key in [pg.K_w, pg.K_r] \
                                 and not self.is_shift_pressed \
                                 and not self.is_ctrl_pressed:
@@ -743,7 +873,14 @@ class rollout_view(object):
                 RMB_click = self.wcollector.RMB_clicked(POS)
             # If nothing clicked, clear selection.
             if LMB_click:
-                self.items_selected = []
+                for N in self.list_rep:
+                    if N['rect name'].collidepoint(POS):
+                        if N['mode'] == 'item':
+                            N['mode'] = 'map'
+                        elif N['mode'] == 'map':
+                            N['mode'] = 'item'
+                        LMB_click = False
+                        break
                 LMB_click = False
 
             if RMB_click:
@@ -784,14 +921,6 @@ class rollout_view(object):
             # Blit background - tabula rasa.
             # All plotting / drawing / blitting should come afterwards.
             self.screen.blit(background, (0, 0))
-#            pg.draw.line(self.screen, 
-#                         self.cc(self.vparam['text_color']), 
-#                         (0, self.header_height - 8), 
-#                         (self.screen_width - 1, self.header_height), 3)
-            # Draw black background for better main button visibility.
-#            pg.draw.rect(self.screen, 
-#                         self.cc(DEFAULT_COLORS['dark1']), 
-#                         [0, 0, self.screen_width, self.header_height - 4], 0)
             # =================================================================
 
 
@@ -804,18 +933,6 @@ class rollout_view(object):
             # =================================================================
             # Rollout overview: Draw items and their connections.
             # =================================================================
-            # Blit temporal offset dt.
-            X = self.name_size
-            X += self.max_name_px + self.item_size 
-            self.screen.blit(self.fonts[self.name_font].render('dt', 1, self.cc(self.text_color)), 
-                             (self.max_name_px // 2, self.header_height - self.name_size))
-            for r in range(self.rollout + 1):
-                self.screen.blit(self.fonts[self.name_font].render(str(int(r + self.dt)), 1, self.cc(self.text_color)), 
-                                 (X - self.name_size // 4, self.header_height - self.name_size))
-                X += self.rollout_offsetX
-            # Determine fading factor for first / last row.
-            tfade = float(self.Y_offset % self.row_height) \
-                    / float(self.row_height)
             # Dependent on mouse over change item (here, nps) color / border / size.
             if self.mouse_over[0] == 'bg':
                 for N in self.list_rep:
@@ -826,39 +943,62 @@ class rollout_view(object):
             elif self.mouse_over[0] == 'item':
                 self.list_rep[self.dict_rep[self.mouse_over[1]]]['col'][self.mouse_over[2]] = (0,0,0)
                 self.list_rep[self.dict_rep[self.mouse_over[1]]]['border'][self.mouse_over[2]] = copy.copy(self.rollback_border)
-                self.list_rep[self.dict_rep[self.mouse_over[1]]]['size'][self.mouse_over[2]] = copy.copy(self.rollback_size)
+                self.list_rep[self.dict_rep[self.mouse_over[1]]]['size'][self.mouse_over[2]] \
+                    = copy.copy(self.list_rep[self.dict_rep[self.mouse_over[1]]]['row_height'])
                 self.change_item_color_recback(self.mouse_over[1], self.mouse_over[2])
                 self.change_item_color_recforward(self.mouse_over[1], self.mouse_over[2])
-            # Draw all names, neuron-pool items, and connections.
-            row_name_hh = (self.row_height - self.name_size) // 2
-            row_item_hh = (self.row_height - self.item_size) // 2
             # Row wise light / dark background.
             for n,N in enumerate(self.list_rep):
-                Y = self.header_height + self.row_height + N['Y'] + self.Y_offset
-                if n % 2 == 0 \
-                        and Y > self.header_height + self.row_height \
-                        and Y < self.screen_height - 2 * self.row_height:
-                    pg.draw.rect(self.screen, self.cc(self.second_bg_col), 
-                                 [0, Y, self.screen_width, self.row_height], 0)
-                elif n % 2 == 0 \
-                        and Y >= self.header_height \
-                        and Y <= self.header_height + self.row_height:
-                    bg_col = self.fade_color(self.second_bg_col, self.vparam['background_color'], tfade)
-                    pg.draw.rect(self.screen, self.cc(bg_col), 
-                                 [0, Y, self.screen_width, self.row_height], 0)
+                Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
+                if n % 2 == 0:
+                    if Y > 0 and Y <= self.screen_height:
+                        bg_col = copy.copy(self.second_bg_col)
+                        pg.draw.rect(self.screen, self.cc(bg_col), 
+                                     [0, Y, self.screen_width, N['row_height']], 0)
 
             # Draw connections.
             for n,N in enumerate(self.list_rep):
-                Y = self.header_height + self.row_height + N['Y'] + self.Y_offset
-                X = self.name_size
-                X += self.max_name_px + self.item_size
-                X += self.rollout_offsetX // 2
+                Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
                 for src_sp,SRC_SP in enumerate(N['src_sps']):
+                    X = self.name_size
+                    X += self.max_name_px + self.item_size
+                    X += self.rollout_offsetX // 2
                     Y_sp = N['Y'] + self.Y_offset
-                    Y_sp = Y_sp + self.header_height + self.row_height + self.row_height // 2
+                    Y_sp = Y_sp + self.header_height + 3 * N['row_height'] // 2
                     Y_sp = np.clip(Y_sp, 
-                                   self.header_height + self.row_height // 2, 
-                                   self.screen_height - self.row_height)
+                                   self.header_height + N['row_height'] // 2, 
+                                   self.screen_height - N['row_height'])
+                    dX = int(src_sp * (self.rollout_offsetX // (2 * len(N['src_sps']))))
+                    for r in range(self.rollout):
+                        # Plot connection sp -> target np
+                        if Y > 0 and Y <= self.screen_height:
+                            pg.draw.line(self.screen, 
+                                         self.cc((127, 127, 127)), 
+                                         (int(X + dX), int(Y_sp)), 
+                                         (int(X + self.rollout_offsetX // 2), int(Y + N['row_height'] // 2)), 2)
+                        # Plot connectionS src_nps -> sp
+                        for src_np in N['src_nps'][src_sp]:
+                            src_np_id = self.dict_rep[src_np]
+                            src_np_Y = self.header_height + N['row_height'] \
+                                       + self.list_rep[src_np_id]['Y'] + self.Y_offset
+                            if src_np_Y > 0 and src_np_Y <= self.screen_height:
+                                pg.draw.line(self.screen, 
+                                             self.cc((127, 127, 127)), 
+                                             (int(X + dX), int(Y_sp)), 
+                                             (int(X - self.rollout_offsetX // 2), int(src_np_Y + N['row_height'] // 2)), 2)
+                        X += self.rollout_offsetX
+            # Draw SPs.
+            for n,N in enumerate(self.list_rep):
+                Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
+                for src_sp,SRC_SP in enumerate(N['src_sps']):
+                    X = self.name_size
+                    X += self.max_name_px + self.item_size
+                    X += self.rollout_offsetX // 2
+                    Y_sp = N['Y'] + self.Y_offset
+                    Y_sp = Y_sp + self.header_height + 3 * N['row_height'] // 2
+                    Y_sp = np.clip(Y_sp, 
+                                   self.header_height + N['row_height'] // 2, 
+                                   self.screen_height - N['row_height'])
                     dX = int(src_sp * (self.rollout_offsetX // (2 * len(N['src_sps']))))
                     for r in range(self.rollout):
                         plot_circle(self.screen, 
@@ -866,63 +1006,75 @@ class rollout_view(object):
                                     self.cc(self.text_color), 
                                     self.cc(self.np_color), 
                                     2)
-                        # Plot connection sp -> target np
-                        if Y > self.header_height + self.row_height and \
-                                Y < self.screen_height - self.row_height:
-                            pg.draw.line(self.screen, 
-                                         self.cc((127, 127, 127)), 
-                                         (int(X + dX), int(Y_sp)), 
-                                         (int(X + self.rollout_offsetX // 2), int(Y + self.row_height // 2)), 2)
-                        # Plot connectionS src_nps -> sp
-                        for src_np in N['src_nps'][src_sp]:
-                            src_np_id = self.dict_rep[src_np]
-                            src_np_Y = self.header_height + self.row_height \
-                                       + self.list_rep[src_np_id]['Y'] + self.Y_offset
-                            if src_np_Y > self.header_height + self.row_height and \
-                                    src_np_Y < self.screen_height - 2 * self.row_height:
-                                pg.draw.line(self.screen, 
-                                             self.cc((127, 127, 127)), 
-                                             (int(X + dX), int(Y_sp)), 
-                                             (int(X - self.rollout_offsetX // 2), int(src_np_Y + self.row_height // 2)), 2)
                         X += self.rollout_offsetX
             # Draw items.
             for n,N in enumerate(self.list_rep):
                 name = N['name'].rjust(self.max_name_len)
-                Y = self.header_height + self.row_height + N['Y'] + self.Y_offset
+                Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
                 X = self.name_size
-                if Y > self.header_height + self.row_height and \
-                        Y < self.screen_height - 2 * self.row_height:
-                    N['rect name'] = self.screen.blit(self.fonts[self.name_font].render(name, 1, self.cc(self.text_color)), 
-                                                      (X, Y + row_name_hh))
-                    X += self.max_name_px + self.item_size 
-                    for r in range(self.rollout + 1):
-                        N['rect'][r] = plot_circle(self.screen, 
-                                                   int(X), int(Y + self.row_height // 2), 
-                                                   N['size'][r] // 2, 
-                                                   self.cc(self.text_color), 
-                                                   self.cc(N['col'][r]), 
-                                                   N['border'][r])
-                        X += self.rollout_offsetX
-                elif Y > self.header_height \
-                        and Y <= self.header_height + self.row_height:
-                    txt_col = self.fade_color(self.text_color, self.vparam['background_color'], tfade)
+                if Y > 0 and Y <= self.screen_height:
+                    # Blit item name.
+                    txt_col = copy.copy(self.text_color)
                     N['rect name'] = self.screen.blit(self.fonts[self.name_font].render(name, 1, self.cc(txt_col)), 
-                                                      (X, Y + row_name_hh))
+                                                      (self.name_size, Y + (N['row_height'] - self.name_size) // 2))
+                    # Blit rolled-out item.
                     X += self.max_name_px + self.item_size 
                     for r in range(self.rollout + 1):
-                        np_col = self.fade_color(N['col'][r], self.vparam['background_color'], tfade)
-                        N['rect'][r] = plot_circle(self.screen, 
-                                                   int(X), int(Y + self.row_height // 2), 
-                                                   N['size'][r] // 2, 
-                                                   self.cc(txt_col), 
-                                                   self.cc(np_col), 
-                                                   N['border'][r])
+                        if N['mode'] == 'map' and r + self.dt <= 0 and abs(r + self.dt) < self.memory:
+                            tmp_idx = (self.current_mem + r + self.dt) % self.memory
+                            N['rect'][r] = self.screen.blit(N['surf'][tmp_idx], (int(X - N['row_height'] // 2), int(Y)))
+                        else:
+                            N['rect'][r] = plot_circle(self.screen, 
+                                                       int(X), int(Y + N['row_height'] // 2), 
+                                                       N['size'][r] // 2, 
+                                                       self.cc(self.text_color), 
+                                                       self.cc(N['col'][r]), 
+                                                       N['border'][r])
                         X += self.rollout_offsetX
 
-                
             # =================================================================
 
 
+            # =================================================================
+            # Draw black background for better main button visibility.
+            # =================================================================
+            pg.draw.rect(self.screen, 
+                         self.cc(DEFAULT_COLORS['dark1']), 
+                         [0, 0, self.screen_width, self.header_height], 0)
+            pg.draw.line(self.screen, 
+                         self.cc(self.vparam['text_color']), 
+                         (0, self.header_height - 2 * self.name_size), 
+                         (self.screen_width - 1, self.header_height - 2 * self.name_size), 2)
+            pg.draw.line(self.screen, 
+                         self.cc(self.vparam['text_color']), 
+                         (0, self.header_height), 
+                         (self.screen_width - 1, self.header_height), 2)
+            # =================================================================
+
+
+
+            # =================================================================
+            # Blit temporal offset dt.
+            # =================================================================
+            X = self.name_size
+            X += self.max_name_px + self.item_size 
+            self.screen.blit(self.fonts[self.name_font].render('dt', 1, self.cc(self.text_color)), 
+                             (self.max_name_px // 2, self.header_height - 3 * self.name_size // 2))
+            for r in range(self.rollout + 1):
+                if r + self.dt == 0:
+                    pg.draw.rect(self.screen, 
+                                 self.cc(self.text_color), 
+                                 [X - 2 * self.name_size, 
+                                  self.header_height - 3 * self.name_size // 2, 
+                                  4 * self.name_size, 
+                                  self.name_size], 0)
+                    self.screen.blit(self.fonts[self.name_font].render('NOW', 1, self.cc(DEFAULT_COLORS['dark1'])), 
+                                     (X - self.name_size, self.header_height - 3 * self.name_size // 2))
+                else:
+                    self.screen.blit(self.fonts[self.name_font].render(str(int(r + self.dt)), 1, self.cc(self.text_color)), 
+                                     (X - self.name_size // 4, self.header_height - 3 * self.name_size // 2))
+                X += self.rollout_offsetX
+            # =================================================================
 
 
 
@@ -1003,7 +1155,12 @@ class rollout_view(object):
             self.screen.blit(self.fonts['small'].render('rollout: ' + str(int(self.rollout)), 
                                                         1, 
                                                         self.cc(self.vparam['text_color'])), 
-                             (436, 16))
+                             (436, 12))
+            # Blitt current memory
+            self.screen.blit(self.fonts['small'].render('memory: ' + str(int(self.memory)), 
+                                                        1, 
+                                                        self.cc(self.vparam['text_color'])), 
+                             (436, 12 + 24))
 
 
 

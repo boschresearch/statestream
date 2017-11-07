@@ -1382,3 +1382,148 @@ def find_sps_between(net, source_np, target_np):
     return sp_list
 
 
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
+
+def compute_distance_matrix(net):
+    """Computes and returns the quadratic graph distance matrix over all NPs.
+
+    Distances (between NPs) are stored in a dict of 2-tuples of NPs.
+    Distance here means always shortest distance.
+    Non-existing paths between nodes result in a None distance, and there
+    are no distances <= 0.
+    """
+    dm = {}
+    for n0 in net['neuron_pools']:
+        for n1 in net['neuron_pools']:
+            dm[(n0, n1)] = None
+    # Add all "one" distances.
+    for s,S in net['synapse_pools'].items():
+        sp_srcs = [src for srcs in S['source'] for src in srcs]
+        for n in sp_srcs:
+            dm[(n, S['target'])] = 1
+    # Iteratively update distance matrix for a conservative #NPs times.
+    for i in range(len(net['neuron_pools']) - 1):
+        changed = False
+        for path,dist in dm.items():
+            # Try to extend currently longest distances / paths.
+            if dist is not None:
+                if dist == i + 1:
+                    for s,S in net['synapse_pools'].items():
+                        sp_srcs = [src for srcs in S['source'] for src in srcs]
+                        if path[1] in sp_srcs:
+                            if dm[(path[0], S['target'])] is None:
+                                dm[(path[0], S['target'])] = dist + 1
+                                changed = True
+        if not changed:
+            break
+    return dm
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
+def get_the_input(net, dist_mat=None):
+    """Returns a meaningfull network input.
+        
+    Meaningfull here means an input of the longest w/o rec. path in the graph.
+
+    We here assume, that the path of maximal length starts with an input.
+    """
+    # Get distance matrix.
+    if dist_mat is None:
+        dm = compute_distance_matrix(net)
+    else:
+        dm = dist_mat
+
+    # Get maximal path length.
+    max_dist = 0
+    max_path = None
+    for path,dist in dm.items():
+        if dist is not None:
+            if dist > max_dist:
+                max_dist = copy.copy(dist)
+                max_path = copy.copy(path)
+    the_input = None
+    if max_path is not None:
+        the_input = max_path[0]
+    return the_input
+
+
+
+def clever_sort(net, source, the_input=None, dist_mat=None):
+    """Two-step sorting of neuron-pools relative to a source.
+
+    First, sort all NPs relative to their distance to the source NP.
+
+    Second, sort all NPs with same distance to sort by their distance
+    to the network input.
+
+    Returns
+    =======
+    clever_sorted : list
+        Sorted list of all neuron-pools.
+    """
+    # Get distance matrix.
+    if dist_mat is None:
+        dm = compute_distance_matrix(net)
+    else:
+        dm = dist_mat
+    # Get the input.
+    if the_input is None:
+        ti = get_the_input(net, dist_mat)
+    else:
+        ti = the_input
+
+    # Get distances from (+) / to (-) source.
+    dists = {}
+    dists[0] = [source]
+    min_dist = 0
+    max_dist = 0
+    for n in net['neuron_pools']:
+        if n != source:
+            if dm[(n, source)] is not None:
+                if -dm[(n, source)] in dists:
+                    if n not in dists[-dm[(n, source)]]:
+                        dists[-dm[(n, source)]].append(n)
+                        if -dm[(n, source)] < min_dist:
+                            min_dist = -dm[(n, source)]
+                else:
+                    dists[-dm[(n, source)]] = [n]
+                    if -dm[(n, source)] < min_dist:
+                        min_dist = -dm[(n, source)]
+            if dm[(source, n)] is not None:
+                if dm[(source, n)] in dists:
+                    if n not in dists[dm[(source, n)]]:
+                        dists[dm[(source, n)]].append(n)
+                        if dm[(source, n)] > max_dist:
+                            max_dist = dm[(source, n)]
+                else:
+                    dists[dm[(source, n)]] = [n]
+                    if dm[(source, n)] > max_dist:
+                        max_dist = dm[(source, n)]
+
+    # Remove doubles from dist lists (+- dists may both occur for a NP).
+
+    # Sort dists intern using distances to the_input.
+    for d,nps in dists.items():
+        if len(nps) != 1:
+            pass
+
+    clever_sorted = []
+    for i in np.arange(min_dist, max_dist):
+        if i in dists:
+            for n in dists[i]:
+                if n not in clever_sorted:
+                    clever_sorted.append(n)
+
+    # Add all non-connected NPs at end.
+    for n in net['neuron_pools']:
+        if n not in clever_sorted:
+            clever_sorted.append(n)
+
+    return clever_sorted
+

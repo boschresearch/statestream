@@ -37,14 +37,14 @@ Some cornerstones
 Implementation:
 
 * Networks are specified as yaml files.
-* For now statestream uses Theano as backend.
+* For now, statestream uses Theano as backend.
 
 ------------------------------------------------------------------------------
 
 Differences to prominent DL-frameworks
 --------------------------------------
 
-The statestream toolbox does not aim to improve over existing tools with respect to memory or computation efficiency but rather enables investigation of streaming networks and interact with them during runtime. In fact the statestream toolbox is much more memory / computation in-efficient than other existing tools.
+The statestream toolbox does not aim to improve over existing tools with respect to memory or computation efficiency but rather enables investigation of streaming networks and interact with them during runtime. In fact, the statestream toolbox is much more memory / computation in-efficient than other existing tools.
 
 * **streaming**: The network parts process information in a frame based / model-parallel synchronized manner, where one frame can be interpreted as one-step rollout of a recurrent neural network. Hence, dependent on network architecture, it may take several (up to many) frames until information is processed by the network. Now states stream through the network. 
 * **separation of 'Layers'**: In contrast to most other deep learning toolkits, which decompose the network into layers, we try to emphasise the graph-nature of neural networks already in implementation. Hence, inside the statestream toolbox the network is decomposed in nodes (neuron-pools, short NP) and edges (synapse-pools, short SP). While NPs hold the state (a.k.a. feature maps) of the network, the SPs define the transformations between those states. For both, NPs and SPs, trainable parameters can be specified (e.g. bias for NPs, weights for SPs).
@@ -103,7 +103,7 @@ The statestream toolbox requires the following python packages:
 * [scikit-image](http://scikit-image.org/): This library is used for image handling.
 * [Matplotlib](https://matplotlib.org/): Used to enhance visualization with Pygame.
 
-These requirements can be install with:
+These requirements can be installed with:
 
 ```
 conda install numpy scipy mkl theano pygpu scikit-image ruamel_yaml matplotlib h5py
@@ -145,7 +145,7 @@ Now the configuration file **~/.statestream/stcore.yml** was created and one can
 Demonstration example
 ---------------------
 
-A demonstration [example](examples/demo.st_graph) is provided with this repository for which neither external dataset nor GPU support is required. It consists of a simple 4 layer network for classification of the first 10 roman numerals: I, II, III, IV, V, VI, VII, VIII, IX, X. Dependent on the monitor settings on the system one may want to adapt the _screen_width_ and _screen_height_ setting in **~/.statestream/stviz.yml**. The demonstration example in particular uses a resolution of 1600 x 900. The example can be started from the statestream folder with:
+A demonstration [example](examples/demo.st_graph) is provided with this repository for which neither an external dataset nor GPU support is required. It consists of a simple 4 layer network for classification of the first 10 roman numerals: I, II, III, IV, V, VI, VII, VIII, IX, X. Dependent on the monitor settings on the system, one may want to adapt the _screen_width_ and _screen_height_ setting in **~/.statestream/stviz.yml** (available after first launch of the visualization). The demonstration example in particular uses a resolution of 1600 x 900. The example can be started from the statestream folder with:
 
 
 ```
@@ -158,7 +158,7 @@ In fact, this is the preferred way to start any statestream session. The statest
 Wed, 21 Dec 2016 12:53:41 @ initializing: (7 remaining) <<  <<
 ```
 
-Now the entire network specified in [demo.st_graph](examples/demo.st_graph) is instantiated in the background. Wait until the number of remaining items which are not yet instantiated reaches 0 and the network is ready (this can take some seconds), e.g.:
+Now, the entire network specified in [demo.st_graph](examples/demo.st_graph) is instantiated in the background. Wait until the number of remaining items which are not yet instantiated reaches 0 and the network is ready (this can take some seconds), e.g.:
 
 ```
 Wed, 21 Dec 2016 12:55:03 @ 00000000 <<  <<
@@ -170,7 +170,7 @@ While waiting, one can already start the provided GUI by entering **viz on** int
 Wed, 21 Dec 2016 12:53:50 @ initializing: (1 remaining) << viz on <<
 ```
 
-The GUI opens and the network topology can be inspected. For this demonstration example an example layout (graphview) of the network is provided. Once all items are instantiated, the network streaming can be started by pushing the play button in the GUI or entering **stream** into the terminal:
+The GUI opens and the network topology can be inspected. For this demonstration example, an example layout (graphview) of the network is provided. Once all items are instantiated, the network streaming can be started by pushing the play button in the GUI or entering **stream** into the terminal:
 
 ```
 Wed, 21 Dec 2016 12:55:24 @ 00000000 << stream <<
