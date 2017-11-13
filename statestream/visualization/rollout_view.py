@@ -16,53 +16,50 @@
 
 
 
+from __future__ import print_function
+
+import os
+import sys
+
+import statestream as sstream
+SSTREAMPATH=os.path.dirname(sstream.__file__)
+sys.argv = [os.path.abspath(a) for a in sys.argv]
+os.chdir(SSTREAMPATH)
+
 import numpy as np
+import matplotlib
 import time
 import copy
-import os
-import importlib
-import shutil
-from ctypes import c_int
-import matplotlib
-
-
 
 from statestream.utils.pygame_import import pg, pggfx
 from statestream.utils.yaml_wrapper import load_yaml, dump_yaml
 
-from statestream.meta.network import suggest_data, \
+
+from statestream.meta.network import is_sane_module_spec, \
                                      shortest_path, \
                                      MetaNetwork, \
                                      compute_distance_matrix, \
                                      get_the_input, \
                                      clever_sort
-from statestream.meta.synapse_pool import sp_get_dict
 from statestream.meta.network import S2L
 
 from statestream.ccpp.cgraphics import cgraphics_colorcode
 
+from statestream.utils.defaults import DEFAULT_COLORS, \
+                                       DEFAULT_VIZ_PARAMETER, \
+                                       DEFAULT_CORE_PARAMETER
+from statestream.utils.helper import is_scalar_shape
 from statestream.utils.rearrange import rearrange_3D_to_2D
 from statestream.utils.rearrange import rearrange_4D_to_2D
-
-from statestream.utils.helper import is_scalar_shape
-from statestream.utils.helper import is_int_dtype
-from statestream.utils.helper import is_float_dtype
-from statestream.utils.helper import is_list_of_lists
 from statestream.utils.shared_memory import SharedMemory
 
-from statestream.visualization.graphics import num2str, brighter, darker
+from statestream.visualization.graphics import num2str
 from statestream.visualization.graphics import blit_plot, \
                                                blit_hist, \
                                                plot_circle
 
 from statestream.visualization.base_widgets import Collector
 from statestream.visualization.widgets.list_selection_window import ListSelectionWindow
-from statestream.visualization.widgets.list_mselection_window import ListMSelWindow
-from statestream.visualization.widgets.parameter_specification_window import ParamSpecWindow
-
-from statestream.utils.defaults import DEFAULT_COLORS, \
-                                       DEFAULT_VIZ_PARAMETER
-
 
 
 
@@ -237,7 +234,7 @@ class rollout_view(object):
     def update_core_comm_queue(self):
         """Method to update communication to core.
         """
-        if self.core_comm_queue:
+        if self.core_comm_queue and self.IPC_PROC:
             if self.IPC_PROC["save/load"].value == 0 \
                     and self.IPC_PROC["instruction"].value == 0:
                 msg = self.core_comm_queue[0]
@@ -505,11 +502,16 @@ class rollout_view(object):
 
     def run(self, IPC_PROC, dummy):
         '''Main running method for visualization.
+
+        In case IPC_PROC is None, rollout view will run in stand-alone mode.
+            - no shared memory
+            - no initialized network
         '''
         # Reference to self.IPC_PROC.
         self.IPC_PROC = IPC_PROC
         # Get and set viz pid.
-        self.IPC_PROC['rvgui pid'].value = os.getpid()
+        if self.IPC_PROC is not None:
+            self.IPC_PROC['rvgui pid'].value = os.getpid()
         # Init pygame.
         pg.display.init()
         pg.font.init()
@@ -529,10 +531,11 @@ class rollout_view(object):
         pg.key.set_repeat(1, 100)
 
         # Get shared memory.
-        self.shm = SharedMemory(self.net, 
-                                self.param,
-                                session_id=\
-                                    int(self.IPC_PROC['session_id'].value))
+        if self.IPC_PROC:
+            self.shm = SharedMemory(self.net, 
+                                    self.param,
+                                    session_id=\
+                                        int(self.IPC_PROC['session_id'].value))
 
         # current visualization frame
         current_rv_frame = 0
@@ -556,10 +559,10 @@ class rollout_view(object):
         self.max_name_len = 0
         for t in ['neuron_pools', 'interfaces']:
             for i in self.net[t]:
-                dummy = self.fonts[self.name_font].render(i, 1, self.cc(self.text_color))
+                loc_dummy = self.fonts[self.name_font].render(i, 1, self.cc(self.text_color))
                 if len(i) > self.max_name_len:
                     self.max_name_len = len(i)
-                    self.max_name_px = dummy.get_size()[0]
+                    self.max_name_px = loc_dummy.get_size()[0]
         self.rollout_offsetX = (self.screen_width \
                                 - self.max_name_px - 4 * self.item_size \
                                 - (self.item_size * (2 + self.max_input_len))) \
@@ -637,18 +640,19 @@ class rollout_view(object):
         # Add break and one-step buttons.
         X0 = 200
         Y0 = 8
-        self.buttons['break'] = self.wcollector.add_button(None, sprite=['pause', 'play'], 
-                               pos=np.asarray([X0, Y0], dtype=np.float32), 
-                               cb_LMB_clicked=lambda: self.cb_button_LMB_click_break())
-        self.buttons['break'].value = self.IPC_PROC['break'].value
-        if self.IPC_PROC['break'].value == 1:
-            self.buttons['one-step'] = self.wcollector.add_button(None, sprite='one-step', 
-                                   pos=np.asarray([X0 + 32, Y0], dtype=np.float32), 
-                                   cb_LMB_clicked=lambda: self.cb_button_LMB_click_one_step())
-        else:
-            self.buttons['one-step'] = self.wcollector.add_button(None, sprite='empty', 
-                                   pos=np.asarray([X0 + 32, Y0], dtype=np.float32), 
-                                   cb_LMB_clicked=lambda: self.cb_button_LMB_click_one_step())
+        if self.IPC_PROC:
+            self.buttons['break'] = self.wcollector.add_button(None, sprite=['pause', 'play'], 
+                                   pos=np.asarray([X0, Y0], dtype=np.float32), 
+                                   cb_LMB_clicked=lambda: self.cb_button_LMB_click_break())
+            self.buttons['break'].value = self.IPC_PROC['break'].value
+            if self.IPC_PROC['break'].value == 1:
+                self.buttons['one-step'] = self.wcollector.add_button(None, sprite='one-step', 
+                                       pos=np.asarray([X0 + 32, Y0], dtype=np.float32), 
+                                       cb_LMB_clicked=lambda: self.cb_button_LMB_click_one_step())
+            else:
+                self.buttons['one-step'] = self.wcollector.add_button(None, sprite='empty', 
+                                       pos=np.asarray([X0 + 32, Y0], dtype=np.float32), 
+                                       cb_LMB_clicked=lambda: self.cb_button_LMB_click_one_step())
         # Add debug button.
         self.buttons['debug'] = self.wcollector.add_button(None, sprite='empty', 
                 pos=np.asarray([X0 + 3 * 32, Y0], dtype=np.float32), 
@@ -661,12 +665,13 @@ class rollout_view(object):
                 pos=np.asarray([550 + 24, Y0], dtype=np.float32), 
                 cb_LMB_clicked=lambda: self.cb_button_LMB_click_rollout_plus())
 
-        self.buttons['memory-minus'] = self.wcollector.add_button(None, sprite='small left', 
-                pos=np.asarray([550, Y0 + 24], dtype=np.float32), 
-                cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_minus())
-        self.buttons['memory-plus'] = self.wcollector.add_button(None, sprite='small right', 
-                pos=np.asarray([550 + 24, Y0 + 24], dtype=np.float32), 
-                cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_plus())
+        if self.IPC_PROC:
+            self.buttons['memory-minus'] = self.wcollector.add_button(None, sprite='small left', 
+                    pos=np.asarray([550, Y0 + 24], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_minus())
+            self.buttons['memory-plus'] = self.wcollector.add_button(None, sprite='small right', 
+                    pos=np.asarray([550 + 24, Y0 + 24], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_plus())
 
         self.buttons['dt-plus'] = self.wcollector.add_button(None, sprite='small left', 
                 pos=np.asarray([self.max_name_px // 2 - 40, self.header_height - 3 * self.name_size // 2 - 2], dtype=np.float32), 
@@ -678,7 +683,8 @@ class rollout_view(object):
         # Load potential rollout view settings.
         self.load_rollout_view()
         self.update_rollout()
-        self.update_memory()
+        if self.IPC_PROC:
+            self.update_memory()
 
         # Some timers
         timer_overall = np.ones([12])
@@ -719,27 +725,29 @@ class rollout_view(object):
             timer_overall[current_rv_frame % 12] = time.time()
 
             # Get current frame.
-            current_frame = int(copy.copy(self.IPC_PROC['now'].value))
-            # Determine beginning of new neural frame.
-            if current_frame > last_frame:
-                # Update last frame.
-                last_frame = current_frame
-                # Set new_frame flag.
-                self.new_frame = True
-            else:
-                self.new_frame = False
+            if self.IPC_PROC:
+                current_frame = int(copy.copy(self.IPC_PROC['now'].value))
+                # Determine beginning of new neural frame.
+                if current_frame > last_frame:
+                    # Update last frame.
+                    last_frame = current_frame
+                    # Set new_frame flag.
+                    self.new_frame = True
+                else:
+                    self.new_frame = False
 
             # =================================================================
             # Get all process states.
             # =================================================================
-            for X in self.list_rep:
-                X['state'] = self.IPC_PROC['state'][self.shm.proc_id[X['name']][0]].value
+            if self.IPC_PROC:
+                for X in self.list_rep:
+                    X['state'] = self.IPC_PROC['state'][self.shm.proc_id[X['name']][0]].value
             # =================================================================
 
             # =================================================================
             # Update internal neural state memory.
             # =================================================================
-            if self.new_frame and self.memory > 0:
+            if self.new_frame and self.memory > 0 and self.IPC_PROC:
                 self.current_mem = (self.current_mem + 1) % self.memory
                 for n,N in enumerate(self.list_rep):
                     N['mem'][self.current_mem][:] = self.shm.dat[N['name']]['state'][0,:]
@@ -772,11 +780,12 @@ class rollout_view(object):
 
 
             # Update break / one-step buttons.
-            self.buttons['break'].value = self.IPC_PROC['break'].value
-            if self.buttons['break'].value == 1:
-                self.buttons['one-step'].sprite = 'one-step'
-            else:
-                self.buttons['one-step'].sprite = 'empty'
+            if self.IPC_PROC:
+                self.buttons['break'].value = self.IPC_PROC['break'].value
+                if self.buttons['break'].value == 1:
+                    self.buttons['one-step'].sprite = 'one-step'
+                else:
+                    self.buttons['one-step'].sprite = 'empty'
 
 
             # =================================================================
@@ -832,41 +841,6 @@ class rollout_view(object):
                             and self.wcollector.top_widget is None:
                         if event.key == pg.K_ESCAPE:
                             self.shutdown()
-                        elif event.key in [pg.K_w, pg.K_r] \
-                                and not self.is_shift_pressed \
-                                and not self.is_ctrl_pressed:
-                            # Open selection to save / recall current rolloutview.
-                            # Determine existing rolloutviews for this model.
-                            rolloutviews = os.listdir(self.home_path + '/.statestream/viz/')
-                            this_bvs = 0
-                            for bv in range(len(rolloutviews)):
-                                if rolloutviews[bv].find('-rolloutview-') != -1 \
-                                        and rolloutviews[bv].find(self.net['name']) != -1:
-                                    this_bvs += 1
-                            selections = [" slot " + str(s) + " " for s in range(this_bvs)]
-                            sel_info = ['' for s in range(this_bvs)]
-                            # For saving also add 'new'.
-                            if event.key == pg.K_w:
-                                selections.append("new slot")
-                                sel_info.append('')
-                                modus = "save rolloutview"
-                            else:
-                                modus = "load rolloutview"
-                            # Add selection window to widget collector.
-                            ListSelectionWindow(parent=None,
-                                                wcollector=self.wcollector,
-                                                pos=np.array([POS[0], POS[1]], 
-                                                             dtype=np.float32),
-                                                selections=selections,
-                                                selections_info=sel_info,
-                                                source='',
-                                                modus=modus,
-                                                cb_LMB_clicked=self.cb_selection_window_click,
-                                                cb_over=self.cb_selection_window_over)
-                        elif event.key == pg.K_g:
-                            self.hotkey['g'] = True
-                            self.hotkey_origin = np.array([POS[0], POS[1]])
-
                     else:
                         self.wcollector.key(event.key, self.is_shift_pressed, event.unicode)
             # =================================================================
@@ -924,7 +898,7 @@ class rollout_view(object):
 
 
             # Compute NN FPS.
-            if time.time() - NNFPS_old_timer > 2.0:
+            if time.time() - NNFPS_old_timer > 2.0 and self.IPC_PROC:
                 tmp_n = int(self.IPC_PROC['now'].value)
                 NNFPS = (tmp_n - NNFPS_old_frame) // 2
                 NNFPS_old_frame = tmp_n
@@ -1059,7 +1033,7 @@ class rollout_view(object):
                     # Blit rolled-out item.
                     X += self.max_name_px + self.item_size 
                     for r in range(self.rollout + 1):
-                        if N['mode'] == 'map' and r + self.dt <= 0 and abs(r + self.dt) < self.memory:
+                        if N['mode'] == 'map' and r + self.dt <= 0 and abs(r + self.dt) < self.memory and self.IPC_PROC:
                             tmp_idx = (self.current_mem + r + self.dt) % self.memory
                             N['rect'][r] = self.screen.blit(N['surf'][tmp_idx], (int(X - N['row_height'] // 2), int(Y)))
                         else:
@@ -1146,7 +1120,7 @@ class rollout_view(object):
             # =================================================================
             # If not all up, plot not ready.
             # =================================================================
-            if not self.all_up:
+            if self.IPC_PROC and not self.all_up:
                 a = np.pi * (self.all_up_current / self.vparam['FPS'])
                 x = self.vparam['screen_width'] - 60 + 16 * np.cos(a)
                 y = 60 + 16 * np.sin(a)
@@ -1201,31 +1175,32 @@ class rollout_view(object):
             timer_overall[current_rv_frame % 12] -= time.time()
 
 
-            # Print overall timing information.
-            self.screen.blit(self.fonts['small'].render(' fps nn: ' + str(NNFPS), 
-                                                        1, 
-                                                        self.cc(self.vparam['text_color'])), 
-                             (10, 10))
             # Blit overall timer.
             self.screen.blit(self.fonts['small'].render('viz dur: ' + str(int(1000 * np.mean(-timer_overall))) + ' ms', 
                                                         1, 
                                                         self.cc(self.vparam['text_color'])), 
                              (10, 30))
-            # Blit current frame.
-            self.screen.blit(self.fonts['small'].render('  frame: ' + str(int(current_frame)), 
-                                                        1, 
-                                                        self.cc(self.vparam['text_color'])), 
-                             (10, 50))
             # Blitt current rollout
             self.screen.blit(self.fonts['small'].render('rollout: ' + str(int(self.rollout)), 
                                                         1, 
                                                         self.cc(self.vparam['text_color'])), 
                              (436, 12))
-            # Blitt current memory
-            self.screen.blit(self.fonts['small'].render('memory: ' + str(int(self.memory)), 
-                                                        1, 
-                                                        self.cc(self.vparam['text_color'])), 
-                             (436, 12 + 24))
+            if self.IPC_PROC:
+                # Print overall timing information.
+                self.screen.blit(self.fonts['small'].render(' fps nn: ' + str(NNFPS), 
+                                                            1, 
+                                                            self.cc(self.vparam['text_color'])), 
+                                 (10, 10))
+                # Blit current frame.
+                self.screen.blit(self.fonts['small'].render('  frame: ' + str(int(current_frame)), 
+                                                            1, 
+                                                            self.cc(self.vparam['text_color'])), 
+                                 (10, 50))
+                # Blitt current memory
+                self.screen.blit(self.fonts['small'].render('memory: ' + str(int(self.memory)), 
+                                                            1, 
+                                                            self.cc(self.vparam['text_color'])), 
+                                 (436, 12 + 24))
 
 
 
@@ -1259,8 +1234,9 @@ class rollout_view(object):
             # =================================================================
             # Evaluate trigger and viz flag.
             # =================================================================
-            if self.IPC_PROC['trigger'].value == 2 or self.IPC_PROC['rvgui flag'].value != 1:
-                self.shutdown()
+            if self.IPC_PROC:
+                if self.IPC_PROC['trigger'].value == 2 or self.IPC_PROC['rvgui flag'].value != 1:
+                    self.shutdown()
             # =================================================================
 
         # Quit pygame.
@@ -1281,8 +1257,68 @@ class rollout_view(object):
         self.state_running = False
         # Dump local rollout view.
         self.dump_rollout_view()
-        self.IPC_PROC['rvgui flag'].value = 0
+        if self.IPC_PROC:
+            self.IPC_PROC['rvgui flag'].value = 0
 
 # =============================================================================
 # =============================================================================
 # =============================================================================
+
+
+# The rollout view can also be called stand-alone without network initialization.
+if __name__ == "__main__":
+    home_path = os.path.expanduser('~')
+
+    # Begin with empty parameter dictionary.
+    param = {}
+    
+    # Load core parameters.
+    # ---------------------------------------------------------------------
+    # Read local system settings if given, else use defaults.
+    tmp_filename = home_path + '/.statestream/stcore.yml'
+    # Load core parameters from file.
+    with open(tmp_filename) as f:
+        tmp_dictionary = load_yaml(f)
+        # Check if core parameter file is empty.
+        if tmp_dictionary is None:
+            print("Warning: Found empty core parameter file ~/.statestream/stcore.yml")
+            tmp_dictionary = {}
+        # Create core parameters from default and loaded.
+        param["core"] = {}
+        for p,P in DEFAULT_CORE_PARAMETER.items():
+            param["core"][p] = tmp_dictionary.get(p, P)
+
+    # Load network parameters.
+    # ---------------------------------------------------------------------
+    # Read graph file.
+    if len(sys.argv) == 2:
+            if sys.argv[1].endswith(".st_graph"):
+                with open(sys.argv[1]) as f:
+                    mn = MetaNetwork(load_yaml(f))
+            elif sys.argv[1].endswith(".st_net"):
+                # Load st_net file and get graph dictionary.
+                with open(sys.argv[1], "rb") as f:
+                    # Load it here only for graph initialization.
+                    loadList = pckl.load(f)
+                    # Get network graph.
+                    mn = MetaNetwork(loadList[0][1])
+            else:
+                print("Error: Invalid filename ending. Expected .st_net or .st_graph.")
+                sys.exit()
+    else:
+        sys.exit()
+
+    # Check module specification for sanity.
+    if not is_sane_module_spec(mn.net):
+        sys.exit()
+
+    # Check sanity of meta.
+    if not mn.is_sane():
+        sys.exit()
+
+    # Generate meta network with ids.
+    net = mn.net
+
+    # Create rollout view instance and start it.
+    rollout_view = rollout_view(net, param)
+    rollout_view.run(None, None)
