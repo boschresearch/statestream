@@ -196,6 +196,13 @@ class rollout_view(object):
             self.dict_rep[n] = len(self.list_rep)
             self.list_rep.append(copy.deepcopy(rep))
 
+        # Plasticity representation for fast viz.
+        self.plasts = {}
+        for p,P in self.net['plasticities'].items():
+            self.plasts[p] = {}
+            self.plasts[p]['rect'] = pg.Rect([0, 0, 2, 2])
+        self.plast_selected = None
+
         # This is the list of elected items.
         self.items_selected = []
         
@@ -373,7 +380,7 @@ class rollout_view(object):
         """Change item color recursively backwards.
         """
         if (rollout > 0):
-            if len(self.list_rep[self.dict_rep[item]]['src_nps']) == 0:
+            if len(self.list_rep[self.dict_rep[item]]['src_nps']) == 0 and rollout + self.dt > 0:
                 self.list_rep[self.dict_rep[item]]['col'][rollout] = copy.copy(self.rollback_invalid_color)
             for src_sp_srcs in self.list_rep[self.dict_rep[item]]['src_nps']:
                 for src_np in src_sp_srcs:
@@ -757,6 +764,10 @@ class rollout_view(object):
                     if X['rect'][r].collidepoint(POS):
                         self.mouse_over = ['item', X['name'], r]
                         break
+            for p,P in self.plasts.items():
+                if P['rect'].collidepoint(POS):
+                    self.mouse_over = ['plast', p]
+                    break
             # =================================================================
 
 
@@ -881,6 +892,12 @@ class rollout_view(object):
                             N['mode'] = 'item'
                         LMB_click = False
                         break
+                if self.mouse_over[0] == 'plast':
+                    if self.mouse_over[1] == self.plast_selected:
+                        self.plast_selected = None
+                    else:
+                        self.plast_selected = copy.copy(self.mouse_over[1])
+                    LMB_click = False
                 LMB_click = False
 
             if RMB_click:
@@ -947,6 +964,28 @@ class rollout_view(object):
                     = copy.copy(self.list_rep[self.dict_rep[self.mouse_over[1]]]['row_height'])
                 self.change_item_color_recback(self.mouse_over[1], self.mouse_over[2])
                 self.change_item_color_recforward(self.mouse_over[1], self.mouse_over[2])
+            if self.plast_selected is not None:
+                if self.plast_selected in self.mn.net_plast_nps:
+                    mn_ro = self.mn.net_plast_nps[self.plast_selected]
+                    for d in range(len(mn_ro)):
+                        if -self.dt + d >= 0 and -self.dt + d <= self.rollout:
+                            for n in mn_ro[d]:
+                                self.list_rep[self.dict_rep[n]]['col'][-self.dt + d] = (0,0,0)
+                                self.list_rep[self.dict_rep[n]]['border'][-self.dt + d] \
+                                    = copy.copy(self.rollback_border)
+                                self.list_rep[self.dict_rep[n]]['size'][-self.dt + d] \
+                                    = copy.copy(self.list_rep[self.dict_rep[n]]['row_height'])
+                    if 'target' in self.net['plasticities'][self.plast_selected]:
+                        tgt_np = self.net['plasticities'][self.plast_selected]['target']
+                        tgt_dt = self.net['plasticities'][self.plast_selected]['target_t']
+                        if -self.dt + tgt_dt >= 0 and -self.dt + tgt_dt <= self.rollout:
+                            self.list_rep[self.dict_rep[tgt_np]]['col'][-self.dt + tgt_dt] = self.vparam['plast_color']
+                    if 'source' in self.net['plasticities'][self.plast_selected]:
+                        src_np = self.net['plasticities'][self.plast_selected]['source']
+                        src_dt = self.net['plasticities'][self.plast_selected]['source_t']
+                        if -self.dt + src_dt >= 0 and -self.dt + src_dt <= self.rollout:
+                            self.list_rep[self.dict_rep[src_np]]['col'][-self.dt + src_dt] = self.vparam['plast_color']
+
             # Row wise light / dark background.
             for n,N in enumerate(self.list_rep):
                 Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
@@ -1049,6 +1088,32 @@ class rollout_view(object):
                          self.cc(self.vparam['text_color']), 
                          (0, self.header_height), 
                          (self.screen_width - 1, self.header_height), 2)
+            # =================================================================
+
+
+
+            # =================================================================
+            # Blit plasticities.
+            # =================================================================
+            cntr = 0
+            for p,P in self.plasts.items():
+                border = 1
+                if self.plast_selected is not None:
+                    if p == self.plast_selected:
+                        border = 6
+                        self.screen.blit(self.fonts[self.name_font].render(p, 1, self.cc(self.text_color)), 
+                                         (self.screen_width // 2, 8 + self.item_size - self.name_size // 2))
+                P['rect'] = plot_circle(self.screen, 
+                                        int(self.screen_width - 2 * (cntr + 1) * self.item_size), 
+                                        8 + self.item_size, 
+                                        self.item_size, 
+                                        self.cc(self.text_color), 
+                                        self.cc(self.vparam['plast_color']), 
+                                        border)
+                cntr += 1
+            if self.mouse_over[0] == 'plast':
+                self.screen.blit(self.fonts[self.name_font].render(self.mouse_over[1], 1, self.cc(self.text_color)), 
+                                 (self.screen_width // 2, 8 + self.item_size - self.name_size // 2))
             # =================================================================
 
 
