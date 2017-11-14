@@ -23,6 +23,8 @@ python visualization/rollout_view.py ../examples/mnist_small.py
 
 * Each plasticity is represented by a red circle on the top right screen corner. A single plasticity can be selected with a LMB click and the rolled out network parts for loss computation are highlighted for this plasticity (compare image below).
 
+* Two adjacent NPs can swap positions in the list by a LMB click on the according empty button at the very left screen corner.
+
 * The temporal offset _dt_, used in the rollout view, can be changed by LMB clicks on the arrow buttons.
 
 * The number of rolled-out frames can be specified by LMB clicks on the arrow buttons.

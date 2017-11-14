@@ -147,51 +147,8 @@ class rollout_view(object):
         sorted_nps = clever_sort(self.net, self.the_input, the_input=self.the_input, dist_mat=self.dm)
 
         # List of dicts representation of network for drawing.
-        self.list_rep = []
-        self.dict_rep = {}
-        overall_Y = 0
-        for n in sorted_nps:
-            rep = {}
-            rep['name'] = copy.copy(n)
-            rep['no_src_sps'] = 0
-            rep['rect name'] = pg.Rect(0, 0, 2, 2)
-            rep['rect item'] = pg.Rect(0, 0, 2, 2)
-            rep['src_sps'] = []
-            rep['src_nps'] = []
-            rep['tgt_nps'] = []
-            rep['mode'] = 'item'
-            rep['col'] = []
-            rep['border'] = []
-            rep['size'] = []
-            rep['row_height'] = 4 * self.name_size
-            rep['Y'] = copy.copy(overall_Y)
-            overall_Y += rep['row_height']
-            rep['mem'] = []
-            rep['surf'] = []
-            # The next is a list over all rollouts of this item.
-            rep['rect'] = []
-            for s,S in net['synapse_pools'].items():
-                # S is source of N.
-                if S['target'] == n:
-                    rep['no_src_sps'] += 1
-                    rep['src_sps'].append(copy.copy(s))
-                    rep['src_nps'].append([inp for factor in S['source'] for inp in factor])
-                # S is target of N.
-                all_srcs = [src for srcs in S['source'] for src in srcs]
-                for src in all_srcs:
-                    if src == n:
-                        if src not in rep['tgt_nps']:
-                            rep['tgt_nps'].append(S['target'])
-            for m in range(self.memory):
-                rep['mem'].append(np.zeros(net['neuron_pools'][n]['shape'], dtype=np.float32))
-                rep['surf'].append(None)
-            for r in range(self.rollout + 1):
-                rep['rect'].append(pg.Rect(0, 0, 2, 2))
-                rep['col'].append(copy.copy(self.np_color))
-                rep['border'].append(1)
-                rep['size'].append(copy.copy(self.item_size))
-            self.dict_rep[n] = len(self.list_rep)
-            self.list_rep.append(copy.deepcopy(rep))
+        self.list_rep = self.get_list_rep(sorted_nps)
+        self.dict_rep = self.get_dict_rep()
 
         # Plasticity representation for fast viz.
         self.plasts = {}
@@ -218,6 +175,72 @@ class rollout_view(object):
 
         # Get colormap.
         self.colormap = np.array(matplotlib.pyplot.get_cmap('magma')(np.arange(256) / 255))
+
+# =============================================================================
+
+    def get_list_rep(self, order):
+        """Returns a list representation with the given order.
+
+        Parameter:
+        ----------
+        order : list of strings
+            Order of NPs defined as a list with NP ids.
+        """
+        list_rep = []
+        overall_Y = 0
+        for n in order:
+            rep = {}
+            rep['name'] = copy.copy(n)
+            rep['no_src_sps'] = 0
+            rep['rect name'] = pg.Rect(0, 0, 2, 2)
+            rep['rect item'] = pg.Rect(0, 0, 2, 2)
+            rep['rect swap'] = pg.Rect(0, 0, 2, 2)
+            rep['src_sps'] = []
+            rep['src_nps'] = []
+            rep['tgt_nps'] = []
+            rep['mode'] = 'item'
+            rep['col'] = []
+            rep['border'] = []
+            rep['size'] = []
+            rep['row_height'] = 5 * self.name_size // 2
+            rep['Y'] = copy.copy(overall_Y)
+            overall_Y += rep['row_height']
+            rep['mem'] = []
+            rep['surf'] = []
+            # The next is a list over all rollouts of this item.
+            rep['rect'] = []
+            for s,S in net['synapse_pools'].items():
+                # S is source of N.
+                if S['target'] == n:
+                    rep['no_src_sps'] += 1
+                    rep['src_sps'].append(copy.copy(s))
+                    rep['src_nps'].append([inp for factor in S['source'] for inp in factor])
+                # S is target of N.
+                all_srcs = [src for srcs in S['source'] for src in srcs]
+                for src in all_srcs:
+                    if src == n:
+                        if src not in rep['tgt_nps']:
+                            rep['tgt_nps'].append(S['target'])
+            for m in range(self.memory):
+                rep['mem'].append(np.zeros(net['neuron_pools'][n]['shape'], dtype=np.float32))
+                rep['surf'].append(None)
+            for r in range(self.rollout + 1):
+                rep['rect'].append(pg.Rect(0, 0, 2, 2))
+                rep['col'].append(copy.copy(self.np_color))
+                rep['border'].append(1)
+                rep['size'].append(copy.copy(self.item_size))
+            list_rep.append(copy.deepcopy(rep))
+        return list_rep
+
+# =============================================================================
+
+    def get_dict_rep(self):
+        """Return dictionary representation of all nps / idx.
+        """
+        dict_rep = {}
+        for n,N in enumerate(self.list_rep):
+            dict_rep[N['name']] = n
+        return dict_rep
 
 # =============================================================================
 
@@ -258,6 +281,7 @@ class rollout_view(object):
         rollout_view['rollout'] = self.rollout
         rollout_view['mem'] = self.memory
         rollout_view['dt'] = self.dt
+        rollout_view['order'] = [N['name'] for N in self.list_rep]
         filename = self.rollout_view_file + "-{:02d}".format(id)
         # Save rollout view.
         with open(filename, 'w') as outfile:
@@ -274,7 +298,15 @@ class rollout_view(object):
                 self.rollout = copy.copy(rv.get('rollout', 6))
                 self.memory = copy.copy(rv.get('mem', 2))
                 self.dt = copy.copy(rv.get('dt', 0))
-
+                order = rv.get('order', {})
+                is_valid = True
+                for n,N in enumerate(self.list_rep):
+                    if N['name'] not in order:
+                        is_valid = False
+                        break
+                if is_valid:
+                    self.list_rep = self.get_list_rep(order)
+                    self.dict_rep = self.get_dict_rep()
 # =============================================================================
 
     def load_image(self, filename):
@@ -626,6 +658,9 @@ class rollout_view(object):
         # Small left / right arrow sprite.
         self.button_sprite['small right'] = pg.transform.scale(self.button_sprite['play'], [24, 24])
         self.button_sprite['small left'] = pg.transform.flip(self.button_sprite['small right'], True, False)
+        self.button_sprite['small up'] = pg.transform.rotate(self.button_sprite['small right'], 90)
+        self.button_sprite['small down'] = pg.transform.flip(self.button_sprite['small up'], False, True)
+        self.button_sprite['small empty'] = pg.transform.scale(self.button_sprite['empty'], [24, 24])
 
         # Create widget collector.
         self.wcollector = Collector(self.screen, 
@@ -866,6 +901,21 @@ class rollout_view(object):
                             N['mode'] = 'item'
                         LMB_click = False
                         break
+                    if N['rect swap'].collidepoint(POS):
+                        # Get source / target info.
+                        src_name = copy.copy(N['name'])
+                        src_idx = copy.copy(self.dict_rep[src_name])
+                        tgt_idx = (src_idx - 1) % len(self.list_rep)
+                        tgt_name = copy.copy(self.list_rep[tgt_idx]['name'])
+                        # Update representations.
+                        self.dict_rep[src_name] = copy.copy(tgt_idx)
+                        self.dict_rep[tgt_name] = copy.copy(src_idx)
+                        self.list_rep[src_idx]['Y'], self.list_rep[tgt_idx]['Y'] \
+                            = self.list_rep[tgt_idx]['Y'], self.list_rep[src_idx]['Y']
+                        self.list_rep[src_idx], self.list_rep[tgt_idx] \
+                            = self.list_rep[tgt_idx], self.list_rep[src_idx]
+                        LMB_click = False
+                        break
                 if self.mouse_over[0] == 'plast':
                     if self.mouse_over[1] == self.plast_selected:
                         self.plast_selected = None
@@ -973,7 +1023,7 @@ class rollout_view(object):
             for n,N in enumerate(self.list_rep):
                 Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
                 for src_sp,SRC_SP in enumerate(N['src_sps']):
-                    X = self.name_size
+                    X = 2 * self.name_size
                     X += self.max_name_px + self.item_size
                     X += self.rollout_offsetX // 2
                     Y_sp = N['Y'] + self.Y_offset
@@ -1004,7 +1054,7 @@ class rollout_view(object):
             for n,N in enumerate(self.list_rep):
                 Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
                 for src_sp,SRC_SP in enumerate(N['src_sps']):
-                    X = self.name_size
+                    X = 2 * self.name_size
                     X += self.max_name_px + self.item_size
                     X += self.rollout_offsetX // 2
                     Y_sp = N['Y'] + self.Y_offset
@@ -1024,12 +1074,24 @@ class rollout_view(object):
             for n,N in enumerate(self.list_rep):
                 name = N['name'].rjust(self.max_name_len)
                 Y = self.header_height + N['row_height'] + N['Y'] + self.Y_offset
-                X = self.name_size
+                X = 2 * self.name_size
                 if Y > 0 and Y <= self.screen_height:
                     # Blit item name.
                     txt_col = copy.copy(self.text_color)
-                    N['rect name'] = self.screen.blit(self.fonts[self.name_font].render(name, 1, self.cc(txt_col)), 
-                                                      (self.name_size, Y + (N['row_height'] - self.name_size) // 2))
+                    if self.mouse_over[0] == 'item':
+                        if self.mouse_over[1] == N['name']:
+                            self.fonts[self.name_font].set_bold(True)
+                            N['rect name'] = self.screen.blit(self.fonts[self.name_font].render(name, 1, self.cc((255,255,255))), 
+                                                              (self.name_size, Y + (N['row_height'] - self.name_size) // 2))
+                            self.fonts[self.name_font].set_bold(False)
+                        else:
+                            N['rect name'] = self.screen.blit(self.fonts[self.name_font].render(name, 1, self.cc(txt_col)), 
+                                  (self.name_size, Y + (N['row_height'] - self.name_size) // 2))
+                    else:
+                        N['rect name'] = self.screen.blit(self.fonts[self.name_font].render(name, 1, self.cc(txt_col)), 
+                              (self.name_size, Y + (N['row_height'] - self.name_size) // 2))
+
+                    N['rect swap'] = self.screen.blit(self.button_sprite['small empty'], (2, Y - 12))
                     # Blit rolled-out item.
                     X += self.max_name_px + self.item_size 
                     for r in range(self.rollout + 1):
@@ -1095,7 +1157,7 @@ class rollout_view(object):
             # =================================================================
             # Blit temporal offset dt.
             # =================================================================
-            X = self.name_size
+            X = 2 * self.name_size
             X += self.max_name_px + self.item_size 
             self.screen.blit(self.fonts[self.name_font].render('dt', 1, self.cc(self.text_color)), 
                              (self.max_name_px // 2, self.header_height - 3 * self.name_size // 2))
