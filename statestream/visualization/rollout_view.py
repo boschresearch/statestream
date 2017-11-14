@@ -209,7 +209,7 @@ class rollout_view(object):
             rep['surf'] = []
             # The next is a list over all rollouts of this item.
             rep['rect'] = []
-            for s,S in net['synapse_pools'].items():
+            for s,S in self.net['synapse_pools'].items():
                 # S is source of N.
                 if S['target'] == n:
                     rep['no_src_sps'] += 1
@@ -222,7 +222,7 @@ class rollout_view(object):
                         if src not in rep['tgt_nps']:
                             rep['tgt_nps'].append(S['target'])
             for m in range(self.memory):
-                rep['mem'].append(np.zeros(net['neuron_pools'][n]['shape'], dtype=np.float32))
+                rep['mem'].append(np.zeros(self.net['neuron_pools'][n]['shape'], dtype=np.float32))
                 rep['surf'].append(None)
             for r in range(self.rollout + 1):
                 rep['rect'].append(pg.Rect(0, 0, 2, 2))

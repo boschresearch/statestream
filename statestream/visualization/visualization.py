@@ -3232,7 +3232,7 @@ class Visualization(object):
             # =================================================================
             self.viz_prof_start["monitor comput."] = time.time()
             # Update monitor for new frame.
-            if self.new_frame:
+            if self.new_frame and False:
                 if self.settings['monitor']['sets']['m state 0/1']['value'] != 'off':
                     for n in self.monitor_item['mean_state']:
                         self.monitor_item['mean_state'][n] \
@@ -3706,16 +3706,27 @@ class Visualization(object):
             # Draw all subwindows for items.
             for SW in self.subwin_blit_queue:
                 s = SW['source']
-                if len(s) == 2:
-                    src_dat = np.copy(self.shm.dat[s[0]][s[1]])
-                elif len(s) == 3:
-                    src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]])
-                elif len(s) == 4:
-                    src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]][s[3]])
-                elif len(s) == 5:
-                    src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]][s[3]][s[4]])
-                elif len(s) == 6:
-                    src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]][s[3]][s[4]][s[5]])
+                # Check if source is shared.
+                is_shared = False
+                if s[0] in self.net['synapse_pools']:
+                    if 'share params' in self.net['synapse_pools'][s[0]] and len(s) == 3:
+                        if s[2] in self.net['synapse_pools'][s[0]]['share params']:
+                            is_shared = True
+                if is_shared:
+                    src_item = self.net['synapse_pools'][s[0]]['share params'][s[2]][0]
+                    src_param = self.net['synapse_pools'][s[0]]['share params'][s[2]][1]
+                    src_dat = np.copy(self.shm.dat[src_item]['parameter'][src_param])
+                else:
+                    if len(s) == 2:
+                        src_dat = np.copy(self.shm.dat[s[0]][s[1]])
+                    elif len(s) == 3:
+                        src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]])
+                    elif len(s) == 4:
+                        src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]][s[3]])
+                    elif len(s) == 5:
+                        src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]][s[3]][s[4]])
+                    elif len(s) == 6:
+                        src_dat = np.copy(self.shm.dat[s[0]][s[1]][s[2]][s[3]][s[4]][s[5]])
 
                 # Apply magic function.
                 if SW['magic'] == '':

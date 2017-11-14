@@ -36,39 +36,39 @@ class ProcessSp(STProcess):
             "value": [],
             "source": []
         }
-        # Check if parameters are shared from somewhere.        
-        if "share params" in self.p:
-            # Do nothing, because the shared source will handle the updates.
-            pass
-        else:
-            # Allocate structure to store updates between read / write phases.
-            # Collect updates for this sp from all plasticities (incl. shared).
-            for p, P in self.net["plasticities"].items():
-                # par[0]: np or sp
-                # par[1]: np/sp name
-                # par[2]: parameter name
-                for par in P["parameter"]:
-                    # Only consider sp parameter.
-                    if par[0] == "sp":
-                        # Check if self is the source for this sp,
-                        if "share params" in self.net["synapse_pools"][par[1]]:
-                            # Loop over all shared params of this sp.
-                            for t, T in self.net["synapse_pools"][par[1]]["share params"].items():
-                                # If self is source of this shared parameter.
-                                if T[0] == self.name:
-                                    # Add update.
-                                    self.current_update["source"].append([p, par[0], par[1], par[2]])
-                        # or if self is this sp.
-                        elif par[1] == self.name:
+        # Allocate structure to store updates between read / write phases.
+        # Collect updates for this sp from all plasticities (incl. shared).
+        for p, P in self.net["plasticities"].items():
+            # par[0]: np or sp
+            # par[1]: np/sp name
+            # par[2]: parameter name
+            for par in P["parameter"]:
+                # Only consider sp parameter.
+                if par[0] == "sp":
+                    # Check if self is the source for this sp,
+                    if "share params" in self.net["synapse_pools"][par[1]]:
+                        # Loop over all shared params of this sp.
+                        for t, T in self.net["synapse_pools"][par[1]]["share params"].items():
+                            # If self is source of this shared parameter.
+                            if T[0] == self.name:
+                                # Add update.
+                                self.current_update["source"].append([p, par[0], par[1], par[2]])
+                    # or if self is this sp.
+                    elif par[1] == self.name:
+                        # Add param only if not shared.
+                        if "share params" in self.p:
+                            if par[2] not in self.p["share params"]:
+                                self.current_update["source"].append([p, par[0], par[1], par[2]])
+                        else:
                             self.current_update["source"].append([p, par[0], par[1], par[2]])
-            # Finally allocate memory.
-            for u in range(len(self.current_update["source"])):
-                par = self.current_update["source"][u]
-                shml = self.shm.layout[par[2]]["parameter"][par[3]]
-                if is_scalar_shape(shml.shape):
-                    self.current_update["value"].append(np.zeros([1,], dtype=shml.dtype))
-                else:
-                    self.current_update["value"].append(np.zeros(shml.shape, dtype=shml.dtype))
+        # Finally allocate memory.
+        for u in range(len(self.current_update["source"])):
+            par = self.current_update["source"][u]
+            shml = self.shm.layout[par[2]]["parameter"][par[3]]
+            if is_scalar_shape(shml.shape):
+                self.current_update["value"].append(np.zeros([1,], dtype=shml.dtype))
+            else:
+                self.current_update["value"].append(np.zeros(shml.shape, dtype=shml.dtype))
 
 
 
