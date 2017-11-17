@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 DEFAULT_CORE_PARAMETER = {
-    'THEANO_FLAGS': 'dnn.conv.algo_fwd=guess_once, dnn.conv.algo_bwd_filter=guess_once, dnn.conv.algo_bwd_data=guess_once, floatX=float32, optimizer_including=cudnn, mode=FAST_RUN',
+    'THEANO_FLAGS': 'dnn.conv.algo_fwd=guess_once, dnn.conv.algo_bwd_filter=none, dnn.conv.algo_bwd_data=guess_once, floatX=float32, optimizer_including=cudnn, mode=FAST_RUN',
     'save_path': '/tmp/',    
     'temporal_memory': [1],
     'random_seed': 42,
