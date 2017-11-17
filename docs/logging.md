@@ -3,7 +3,7 @@ Logging
 
 ([back to documentation](README.md))
 
-At first start up of the statestream core with or without an **st_graph** file argument, some configuration files are created in the folder **~/.statestream/**. Default values for this first setup and also if a configuration is not found in this local file can be found in **statestream/utils/defaults.py**. Overview over logging files:
+At first start up of the statestream core with or without an **st_graph** file argument, some configuration files are created in the folder **~/.statestream/**. Default values for this first setup and also if a configuration is not found in this local file can be found in [statestream/utils/defaults.py](../statestream/utils/defaults.py). Overview over logging files:
 
 * **~/.statestream/shm-%d.log**: Logs a list of all shared memory variables for this (%d) session and their sizes in bytes.
 * **~/.statestream/pid.log**: Logs all process ids.

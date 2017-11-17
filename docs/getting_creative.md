@@ -9,7 +9,7 @@ This guide aims to give some advice how the toolbox can be used and extended.
 Specifying different network architectures
 ------------------------------------------
 
-The main application of the toolbox is to specify new network architectures via st_graph files, to explore their behavior via the visualization and share them with the community. At this point we aim to keep the API of the specification files downward compatible which cannot be said for any other code API
+The main application of the toolbox is to specify new network architectures via st_graph files, to explore their behavior via the visualization and share them with the community. At this point, we aim to keep the API of the specification files backward compatible which cannot be said for any other code API
 in the statestream toolbox. Please see also the [network specification](network_specification.md).
 
 
@@ -17,21 +17,21 @@ in the statestream toolbox. Please see also the [network specification](network_
 Writing new clients
 -------------------
 
-To adapt scheduling of training / evaluation procedures one can write new clients. Please see the [clients specification](clients.md).
+To adapt scheduling of training / evaluation procedures, one can write new clients. Please see the [clients specification](clients.md).
 
 
 
 Adding new interfaces
 ---------------------
 
-On the basis of existing interfaces, it is relatively easy to add new interfaces for different applications, hardware, simulations, and so on. Please see also the [interface section](interfaces.md)
+On the basis of existing interfaces, it is relatively easy to add new interfaces for different applications, hardware, simulations, datasets, and so on. Please see also the [interface section](interfaces.md)
 
 
 
-Adding new featrues
+Adding new features
 -------------------
 
-* **activation functions**: dditional activation functions may be added in **statestream/neuronal/activations.py**.
+* **activation functions**: Additional activation functions can be added in **statestream/neuronal/activations.py**.
 * **optimizers**: New optimizers can be added extending **neuronal/optimizers.py** and **meta/optimizers.py**.
 * **losses**: New losses can be added extending **neuronal/losses.py** and **meta/losses.py**.
 
