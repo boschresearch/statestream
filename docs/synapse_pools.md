@@ -80,6 +80,27 @@ By default, all weight parameters are initialized with Xavier initialization [[X
 
 Initializations are implemented in [meta/synapse_pools.py](../statestream/meta/synapse_pool.py).
 
-
 Please see also the examples folder for more details.
 
+
+Transformer synapse-pool
+------------------------
+
+One special type of synapse-pool exist to enable spatial transformer operations [[Jaderberg et al. 2015]](references.md). To use this feature the synapse-pool has to have the tag **TRANSFORMER** and exactly two sources, first the to be transformed layer and second the transformation, i.e.:
+
+```
+neuron_pools:
+	layer:
+		shape: [128, 64, 32]
+	transform:
+		shape: [2, 64, 32]
+	transformed_layer:
+		shape: [128, 64, 32]
+synapse_pools:
+	transform:
+	    source: [[layer], [transform]]
+	    target: transformed_layer
+	    tags: [TRANSFORMER]
+```
+
+The two transformation features represent the _dx_ and _dy_ components of the pixelwise transformation and are percent of image resolution. Please also see the example in [examples/test_interface_transform_cifar10.st_graph](../examples/test_interface_transform_cifar10.st_graph).

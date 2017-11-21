@@ -282,6 +282,15 @@ class SynapsePool(object):
         else:
             # Determine number of features in target np.
             tgt_shape = np_state_shape(self.net, self.p["target"])
+            # Handle transformer exception.
+            if "tags" in self.p:
+                if "TRANSFORMER" in self.p["tags"]:
+                    from statestream.neuronal.spatial_transformer_dense import warp_transform
+                    self.post_synaptic.append(warp_transform(self.source_np[0][0].state[-1], 
+                                                             tgt_shape,
+                                                             self.source_np[1][0].state[-1][:,[0],:,:],
+                                                             self.source_np[1][0].state[-1][:,[1],:,:]))
+                    return
             # Generate graph to compute all factor outputs.
             # _SCALED_CONV will be a 2D list of theano variables holding
             # all target activations.

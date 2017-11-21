@@ -1,0 +1,50 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+
+name: test_transform_cifar10
+agents: 8
+neuron_pools:
+    tcf10_image:
+        shape: [3, 32, 32]
+        tags: [sensor]
+    tcf10_transform:
+        shape: [2, 32, 32]
+        tags: [sensor]
+    cp:
+        shape: [3, 32, 32]
+        tags: [sensor]
+    img_transformed:
+        shape: [3, 32, 32]
+synapse_pools:
+    img_cp: 
+        source: [[tcf10_image]]
+        target: cp
+        rf: 1
+        init W_0_0: id
+    sp_transform:
+        source: [[tcf10_image], [tcf10_transform]]
+        target: img_transformed
+        tags: [TRANSFORMER]
+plasticities: {}
+interfaces:
+    tcifar10:
+        type: transform_cifar10
+        in: []
+        out: [tcf10_image, tcf10_transform]
+        source_path: /opt/dl/data/cifar10/cifar-10-batches-py/

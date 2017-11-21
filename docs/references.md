@@ -69,3 +69,13 @@ Ramprasaath R. Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, 
 __Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization__.
 
 [https://arxiv.org/abs/1610.02391](https://arxiv.org/abs/1610.02391)
+
+
+
+* [Jaderberg et al. 2015]
+
+Max Jaderberg, Karen Simonyan, Andrew Zisserman, Koray Kavukcuoglu
+
+__Spatial Transformer Networks__.
+
+[https://arxiv.org/abs/1506.02025](https://arxiv.org/abs/1506.02025)
