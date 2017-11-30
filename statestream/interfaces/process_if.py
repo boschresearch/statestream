@@ -59,6 +59,9 @@ class ProcessIf(object):
         # Get and set device.
         self.device = self.net["interfaces"][name].get("device", "cpu")
 
+        # Get / Set auto parameters.
+        self.auto_shm_write = self.p.get("auto_shm_write", True)
+
         # Get / Set interface screen resolution.
         self.screen_width = self.p.get("screen_width", 800)
         self.screen_height = self.p.get("screen_height", 600)
@@ -333,16 +336,17 @@ class ProcessIf(object):
                 self.update_frame_writeout()
 
                 # Write update for all variables to shared memory (inl. np states).
-                for var in self.shm.dat[self.name]["variables"]:
-                    # Check for batch or single mode.
-                    if self.dat["parameter"]["mode"] == 1 \
-                            and var in self.p["out"]:
-                        for a in range(self.net["agents"] - 1):
-                            self.dat["variables"][var][a + 1,:,:,:] \
-                                = self.dat["variables"][var][0,:,:,:]
-                    # Write to shared memory.
-                    self.shm.set_shm([self.name, "variables", var],
-                                     self.dat["variables"][var])
+                if self.auto_shm_write:
+                    for var in self.shm.dat[self.name]["variables"]:
+                        # Check for batch or single mode.
+                        if self.dat["parameter"]["mode"] == 1 \
+                                and var in self.p["out"]:
+                            for a in range(self.net["agents"] - 1):
+                                self.dat["variables"][var][a + 1,:,:,:] \
+                                    = self.dat["variables"][var][0,:,:,:]
+                        # Write to shared memory.
+                        self.shm.set_shm([self.name, "variables", var],
+                                         self.dat["variables"][var])
 
                 self.state = process_state["WaW"]
                 # End timing of write phase

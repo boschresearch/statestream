@@ -47,6 +47,7 @@ is updated. Default is 1.
     * _single_: Here, samples in the batch are identical copies of the first sample. This mode can be used to analyse for example network statistics or (epistemic) network uncertainty. The split parameter is of course not respected by the interface.
     * _epoch_: Samples are drawn epoch wise without replacement. The split parameter is respected.
     * _test_: Samples are drawn epoch wise only from the test dataset. The split parameter is not respected.
+* **auto_shm_write** (type: bool): Interfaces normally write their generated data to shared memory (neuron-pool states) through a variable of the generic interface class. The _auto_shm_write_ parameter enables / disables the automatic write to shared memory of the specific interface through the generic interface class. Default is _True_.
 
 ```
 interfaces:
