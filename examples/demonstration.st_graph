@@ -1,0 +1,113 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: demonstration
+agents: 128
+globals:
+    glob_input_size: 28
+neuron_pools:
+    image:
+        shape: [1, glob_input_size, glob_input_size]
+    label:
+        shape: [10, 1, 1]
+    prediction:
+        tags: [prediction]
+    conv1:
+        shape: [32, glob_input_size // 2, glob_input_size // 2]
+        tags: [hidden]
+    conv2:
+        shape: [64, glob_input_size // 4, glob_input_size // 4]
+        tags: [hidden]
+    pred1:
+        tags: [prediction]
+    pred2:
+        tags: [prediction]
+    label_copy:
+        shape: [10, 1, 1]
+synapse_pools:
+    img_c1:
+        source: [[image]]
+        target: conv1
+        rf: [[5]]
+    c1_c2:
+        source: [[conv1]]
+        target: conv2
+        rf: [[5]]
+    c1_pred:
+        source: [[conv1]]
+        target: pred1
+    c2_pred:
+        source: [[conv2]]
+        target: pred2
+    pred_pred:
+        source: [[pred1, pred2]]
+        target: prediction
+        rf: [[1, 1]]
+        init W_0_0: id
+        init W_0_1: id
+    label_cp:
+        source: [[label]]
+        target: label_copy
+        rf: [[1]]
+        init W_0_0: id
+plasticities:
+    class:
+        type: loss
+        loss_function: categorical_crossentropy
+        source: pred1
+        source_t: 1
+        target: label_copy
+        target_t: 0
+        lr: 1e-3
+        tags: [adam_optimizer]
+        parameter:
+        - [sp, c1_pred, W_0_0]
+    deep_class:
+        type: loss
+        loss_function: categorical_crossentropy
+        source: pred2
+        source_t: 3
+        target: label
+        target_t: 0
+        lr: 1e-4
+        tags: [adam_optimizer]
+        parameter:
+        - [sp, img_c1, W_0_0]
+        - [sp, c1_c2, W_0_0]
+        - [sp, c2_pred, W_0_0]
+        - [np, conv2, b]
+interfaces:
+    mnist:
+        type: mnist
+        in: [mnist_pred]
+        out: [mnist_image, mnist_label]
+        remap:
+            mnist_image: image
+            mnist_label: label
+            mnist_pred: prediction
+        source_file: /opt/dl/data/mnist.pkl.gz
+        fading: 0
+tag_specs:
+    hidden:
+        act: relu
+        dropout: 0.2
+    prediction:
+        shape: [10, 1, 1]
+        act: softmax
+    adam_optimizer:
+        optimizer: adam
+        decay: 0.999
+        momentum: 0.99
