@@ -287,11 +287,13 @@ class StateStream(object):
 
         # Instantiate core clients.
         self.cclients = {}
+        self.cclients_active = {}
         if "core_clients" in self.net:
             for cc,CC in self.net["core_clients"].items():
                 CClientConst = getattr(importlib.import_module("examples.core_clients." + CC["type"]), 
                                        "CClient_" + CC["type"])
                 self.cclients[cc] = CClientConst(cc, self.net, self.param, self.shm.session_id, self.IPC_PROC)
+                self.cclients_active[cc] = CC.get("state", False)
 
         # Set initial frame counter to zero.
         self.frame_cntr = 0
@@ -559,7 +561,8 @@ class StateStream(object):
                 self.IPC_PROC["trigger"].value = process_trigger["WaR-W"]
                 # Execute writeout method for all clients.
                 for cc,CC in self.cclients.items():
-                    CC.writeout()
+                    if self.cclients_active[cc]:
+                        CC.writeout()
                 # End timer for write phase.
                 self.profiler_core_write[int(self.frame_cntr) % int(self.param["core"]["profiler_window"])] \
                     = time() - timer_start_write
@@ -818,14 +821,16 @@ class StateStream(object):
                     
                     # Execute before_readin method for all core clients.
                     for cc,CC in self.cclients.items():
-                        CC.before_readin()
+                        if self.cclients_active[cc]:
+                            CC.before_readin()
                     
                     # Set all processes to reading phase.
                     self.IPC_PROC["trigger"].value = process_trigger["WaW-R"]
     
                     # Execute readin method for all core clients.
                     for cc,CC in self.cclients.items():
-                        CC.readin()
+                        if self.cclients_active[cc]:
+                            CC.readin()
 
                     # Update temporal memory.
                     update_tmem(self.param["core"]["temporal_memory"], 
@@ -1026,6 +1031,14 @@ class StateStream(object):
                         split = max(int(self.terminal_command.split()[1]), 0)
                         split = min(split, self.net['agents'])
                         self.IPC_PROC['plast split'].value = split
+                elif self.terminal_command.startswith('ccstop'):
+                    cc_name = self.terminal_command.split()[1]
+                    if cc_name in self.cclients_active:
+                        self.cclients_active[cc_name] = False
+                elif self.terminal_command.startswith('ccstart'):
+                    cc_name = self.terminal_command.split()[1]
+                    if cc_name in self.cclients_active:
+                        self.cclients_active[cc_name] = True
                 else:
                     self.terminal_current_show \
                         = "unknown " + self.terminal_command
@@ -1151,11 +1164,11 @@ class StateStream(object):
                                   + str(S["source"][0][0]).ljust(16) + " to " \
                                   + str(S["target"]).ljust(16))
                     elif self.terminal_current_show == "ccs":
-                        print("\n    core-clients: " \
+                        print("\n\n    core-clients: " \
                               + str(len(self.net.get("core_clients", {}))))
                         for c,C in self.net.get("core_clients", {}).items():
                             print("        " + c.ljust(16) + " of type " \
-                                  + str(C["type"]))
+                                  + str(C["type"]) + "  (active: " + str(self.cclients_active[c]) + ")")
                     elif self.terminal_current_show.startswith('ccmsg'):
                         cc_name = self.terminal_current_show.split()[1]
                         print("\n    messages of core-client " + cc_name)
@@ -1179,6 +1192,7 @@ class StateStream(object):
                         print("        bottleneck [PID] [factor]  Reset the bottleneck factor for process PID.")
                         print("        ccmsg [cc name]            Show messages of core-client with given name.")
                         print("        ccs                        Show list of core-clients.")
+                        print("        ccstart/ccstop [cc_name]   Start / stop core-client with given name.")
                         print("        clean on/off               Enable/disable clear screen for terminal.")
                         print("        exit                       Exit statestream.")
                         print("        help, ?                    Show this info.")

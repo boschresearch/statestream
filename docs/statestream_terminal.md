@@ -10,6 +10,12 @@ Available commands
 
 * **bottleneck** [PID (int)] [factor (float)]: This will reset the bottleneck factor of the process PID to the specified factor. Please see [temporal controls](temporal_controls.md) for further details.
 
+* **ccmsg [cc_name (string)]**: Shows messages of core-clients with given name.
+
+* **ccs**: Shows a list of all available core-clients with their name and state.
+
+* **ccstart / ccstop [cc_name (string)]**: Starts / stops the specified core-client.
+
 * **clean on/off**: Switch display mode for statestream terminal. In clean mode, the screen is cleared. For debugging
 purposes it is sometimes useful to set clean off.
 
