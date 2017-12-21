@@ -108,14 +108,18 @@ To use the theano backend, the following packages are required:
 
 To use the tensorflow backend, the following packages are required:
 
-* [Tensorflow >= 1.4](https://www.tensorflow.org/): Please follow 
+* [Tensorflow >= 1.4](https://www.tensorflow.org/): Please follow this [documentation](https://www.tensorflow.org/install/install_linux).
 
-
-These requirements can be installed with:
+For the Theano backend, these requirements can be installed with:
 
 ```
 conda install numpy scipy mkl theano pygpu scikit-image ruamel_yaml matplotlib h5py
 pip install pygame sharedarray
+```
+
+Additionally, Tensorflow can be installed, e.g. through:
+
+```
 pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.4.0-cp35-cp35m-linux_x86_64.whl
 ```
 
@@ -148,6 +152,7 @@ python core.py
 
 Now the configuration file **~/.statestream/stcore.yml** was created and one can change the theano flag or the save folder parameter which specifies where for example models should be saved. In this folder also other log files are stored during runtime.
 
+The demonstration example does not make use of GPU acceleration, but in order to use GPU support see the help on [devices](docs/devices.md).
 
 ------------------------------------------------------------------------------
     
