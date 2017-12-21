@@ -16,15 +16,11 @@
 
 
 
-import theano
-import theano.tensor as T
-
 import numpy as np
 
 from statestream.utils.helper import is_scalar_shape
 from statestream.meta.neuron_pool import np_shm_layout, np_state_shape, np_init
-
-from statestream.neuronal.activations import *
+from statestream.backends.backends import import_backend
 
 
 
@@ -43,6 +39,8 @@ class NeuronPool(object):
         Deprecated.    
     """
     def __init__(self, name, net, param, mn):
+        # Import backend.
+        self.B = import_backend(None, None, name)
         # Get global structure.
         self.name = name
         self.net = net
@@ -52,23 +50,27 @@ class NeuronPool(object):
         self.dat_layout = np_shm_layout(self.name, self.net, self.param)
         self.dat = {}
         for t in ["parameter", "variables"]:
+            settable = True
             self.dat[t] = {}
             for i,i_l in self.dat_layout[t].items():
-                if i_l.type == "th":
+                if i_l.type == "backend":
                     if is_scalar_shape(i_l.shape):
-                        self.dat[t][i] = theano.shared(theano._asarray(0.0, dtype=theano.config.floatX),
-                                                                    borrow=True,
-                                                                    name=name + " " + i)
+                        self.dat[t][i] = self.B.scalar(1.0, 
+                                                       dtype=np.float32, 
+                                                       name=name + "." + i,
+                                                       settable=settable)
                     else:
                         if i_l.broadcastable is not None:
-                            self.dat[t][i] = theano.shared(np.ascontiguousarray(np.zeros(i_l.shape, dtype=theano.config.floatX)),
+                            self.dat[t][i] = self.B.variable(np.ascontiguousarray(np.zeros(i_l.shape, dtype=np.float32)),
                                                                         borrow=True,
-                                                                        name=name + " " + i,
-                                                                        broadcastable=i_l.broadcastable)
+                                                                        name=name + "." + i,
+                                                                        broadcastable=i_l.broadcastable,
+                                                                        settable=settable)
                         else:
-                            self.dat[t][i] = theano.shared(np.ascontiguousarray(np.zeros(i_l.shape, dtype=theano.config.floatX)),
+                            self.dat[t][i] = self.B.variable(np.ascontiguousarray(np.zeros(i_l.shape, dtype=np.float32)),
                                                                         borrow=True,
-                                                                        name=name + " " + i)
+                                                                        name=name + "." + i,
+                                                                        settable=settable)
                 elif i_l.type == "np":
                     if is_scalar_shape(i_l.shape):
                         self.dat[t][i] = np.array([1,], dtype=i_l.dtype)
@@ -97,17 +99,17 @@ class NeuronPool(object):
         # Get / set noise.
         self.noise = self.p.get("noise", None)
         if self.noise is not None:
-            self.noise_dist = theano.tensor.shared_randomstreams.RandomStreams(np.random.RandomState(42).randint(99999))
+            self.noise_dist = self.B.randomstream(np.random.RandomState(42).randint(99999), self.noise)
         # Get np dropout.
         self.dropout = self.p.get("dropout", None)
         if self.dropout is not None:
             # Random stream for dropout.
-            self.dropout_srng = theano.tensor.shared_randomstreams.RandomStreams(np.random.RandomState(42).randint(999999))
+            self.dropout_srng = self.B.randomstream(np.random.RandomState(42).randint(999999), "binomial")
         # Get np zoneout.
         self.zoneout = self.p.get("zoneout", None)
         if self.zoneout is not None:
             # Random stream for zoneout.
-            self.zoneout_srng = theano.tensor.shared_randomstreams.RandomStreams(np.random.RandomState(42).randint(999999))
+            self.zoneout_srng = self.B.randomstream(np.random.RandomState(42).randint(999999), "binomial")
         # Get / set batch-norm specified or default parameter.
         self.batchnorm_mean = self.p.get("batchnorm_mean", False)
         self.batchnorm_std = self.p.get("batchnorm_std", False)
@@ -121,13 +123,15 @@ class NeuronPool(object):
         self.state_AB = []
         self.state_SPA = []
         self.sparse_state = []
-        # Define state of neuron pool(same size as input)
-#        self.state.append(theano.shared(np.ascontiguousarray(np.zeros(self.shape, dtype=theano.config.floatX)),
+        # Define state of neuron-pool dependent on backend dim. ordering.
+#        self.state.append(theano.shared(np.ascontiguousarray(np.zeros(self.shape, dtype=np.float32)),
 #                                                             borrow=True,
 #                                                             name=name + " state"))
-        state = theano.shared(np.zeros(self.shape, dtype=theano.config.floatX),
-                              borrow=True,
-                              name=name + " state")
+        state = self.B.variable(np.zeros(self.shape, dtype=np.float32),
+                                borrow=True,
+                                name=name + ".state",
+                                settable=True)
+
         self.state.append(state)
 
         # Begin with an empty sources (synapse pools) list.
@@ -171,35 +175,47 @@ class NeuronPool(object):
                 if self.noise == "normal":
                     self.state_SUM[-1] += self.dat["parameter"]["noise_mean"] \
                                           + self.dat["parameter"]["noise_std"] \
-                                          * self.noise_dist.normal(self.shape)
+                                          * self.noise_dist(self.shape)
                 elif self.noise == "uniform":
                     self.state_SUM[-1] += (self.dat["parameter"]["noise_max"] - self.dat["parameter"]["noise_min"]) \
-                                          * self.noise_dist.uniform(self.shape) \
+                                          * self.noise_dist(self.shape) \
                                           - self.dat["parameter"]["noise_min"]
 
                 # Apply batch normalization for mean.
                 if self.batchnorm_mean:
                     if self.batchnorm_mean == "full":
-                        mean = self.state_SUM[-1].mean([0,1,2,3])
+                        mean = self.B.mean(self.state_SUM[-1], 
+                                           axis=[0, 1, 2, 3])
                     elif self.batchnorm_mean == "spatial":
-                        mean = self.state_SUM[-1].mean([0,2,3]).dimshuffle('x', 0, 'x', 'x')
+                        mean = self.B.mean(self.state_SUM[-1], 
+                                           axis=[0, 2, 3])
+                        mean = self.B.dimshuffle(mean, ('x', 0, 'x', 'x'))
                     elif self.batchnorm_mean == "feature":
-                        mean = self.state_SUM[-1].mean([0,1]).dimshuffle('x', 'x', 0, 1)
+                        mean = self.B.mean(self.state_SUM[-1], 
+                                           axis=[0, 1])
+                        mean = self.B.dimshuffle(mean, ('x', 'x', 0, 1))
                     elif self.batchnorm_mean == "scalar":
-                        mean = self.state_SUM[-1].mean([0]).dimshuffle('x', 0, 1, 2)
+                        mean = self.B.mean(self.state_SUM[-1], axis=[0])
+                        mean = self.B.dimshuffle(mean, ('x', 0, 1, 2))
                     self.state_SUM[-1] = self.state_SUM[-1] - mean
 
                 # Apply batch normalization for std.
                 if self.batchnorm_std:
                     # Compute mean.
                     if self.batchnorm_std == "full":
-                        std = T.sqrt(self.state_SUM[-1].var([0,1,2,3]) + 1e-6)
+                        std = self.B.sqrt(self.B.var(self.state_SUM[-1], 
+                                                     axis=[0, 1, 2, 3]) + 1e-6)
                     if self.batchnorm_std == "spatial":
-                        std = T.sqrt(self.state_SUM[-1].var([0,2,3]) + 1e-6).dimshuffle('x', 0, 'x', 'x')
+                        std = self.B.dimshuffle(self.B.sqrt(self.B.var(self.state_SUM[-1], 
+                                                                       axis=[0,2,3]) + 1e-6), 
+                                                ('x', 0, 'x', 'x'))
                     if self.batchnorm_std == "feature":
-                        std = T.sqrt(self.state_SUM[-1].var([0,1]) + 1e-6).dimshuffle('x', 'x', 0, 1)
+                        std = self.B.dimshuffle(self.B.sqrt(self.B.var(self.state_SUM[-1], 
+                                                                       axis=[0,1]) + 1e-6), 
+                                                ('x', 'x', 0, 1))
                     if self.batchnorm_std == "scalar":
-                        std = T.sqrt(self.state_SUM[-1].var([0]) + 1e-6).dimshuffle('x', 0, 1, 2)
+                        std = self.B.dimshuffle(self.B.sqrt(self.B.var(self.state_SUM[-1], axis=[0]) + 1e-6), 
+                                                ('x', 0, 1, 2))
                     # Divide by std.
                     self.state_SUM[-1] = self.state_SUM[-1] / std
                 
@@ -208,20 +224,17 @@ class NeuronPool(object):
                 if self.layernorm_mean:
                     # Compute mean.
                     if self.layernorm_mean == "full":
-                        mean = self.state_SUM[-1].mean([1,2,3]).dimshuffle(0, 
-                                                                           'x', 
-                                                                           'x', 
-                                                                           'x')
+                        mean = self.B.dimshuffle(self.B.mean(self.state_SUM[-1], 
+                                                             axis=[1,2,3]), 
+                                                 (0, 'x', 'x', 'x'))
                     elif self.layernorm_mean == "spatial":
-                        mean = self.state_SUM[-1].mean([2,3]).dimshuffle(0, 
-                                                                         1, 
-                                                                         'x', 
-                                                                         'x')
+                        mean = self.B.dimshuffle(self.B.mean(self.state_SUM[-1], 
+                                                             axis=[2,3]), 
+                                                 (0, 1, 'x', 'x'))
                     elif self.layernorm_mean == "feature":
-                        mean = self.state_SUM[-1].mean([1]).dimshuffle(0, 
-                                                                       'x', 
-                                                                       1, 
-                                                                       2)
+                        mean = self.B.dimshuffle(self.B.mean(self.state_SUM[-1], 
+                                                             axis=[1]), 
+                                                 (0, 'x', 1, 2))
                     # Substract mean.
                     self.state_SUM[-1] = self.state_SUM[-1] - mean
 
@@ -230,11 +243,17 @@ class NeuronPool(object):
                 if self.layernorm_std:
                     # Compute mean.
                     if self.layernorm_std == "full":
-                        std = T.sqrt(self.state_SUM[-1].var([1,2,3]) + 1e-6).dimshuffle(0, 'x', 'x', 'x')
+                        std = self.B.dimshuffle(self.B.sqrt(self.B.var(self.state_SUM[-1], 
+                                                                       axis=[1,2,3]) + 1e-6), 
+                                                (0, 'x', 'x', 'x'))
                     if self.layernorm_std == "spatial":
-                        std = T.sqrt(self.state_SUM[-1].var([2,3]) + 1e-6).dimshuffle(0, 1, 'x', 'x')
+                        std = self.B.dimshuffle(self.B.sqrt(self.B.var(self.state_SUM[-1], 
+                                                                       axis=[2,3]) + 1e-6), 
+                                                (0, 1, 'x', 'x'))
                     if self.layernorm_std == "feature":
-                        std = T.sqrt(self.state_SUM[-1].var([1]) + 1e-6).dimshuffle(0, 'x', 1, 2)
+                        std = self.B.dimshuffle(self.B.sqrt(self.B.var(self.state_SUM[-1], 
+                                                                       axis=[1]) + 1e-6), 
+                                                (0, 'x', 1, 2))
                     # Divide by std.
                     self.state_SUM[-1] = self.state_SUM[-1] / std
 
@@ -242,22 +261,28 @@ class NeuronPool(object):
                 # ------------------------------------------------------------
                 if self.gain_shape == "full":
                     if self.gain_unshare:
-                        self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"].dimshuffle(0, 1, 2, 3)
+                        self.state_SUM[-1] = self.state_SUM[-1] * self.B.dimshuffle(self.dat["parameter"]["g"], (0, 1, 2, 3))
                     else:
-                        self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"].dimshuffle("x", 0, 1, 2)
+                        self.state_SUM[-1] = self.state_SUM[-1] * self.B.dimshuffle(self.dat["parameter"]["g"], 
+                                                                                    ("x", 0, 1, 2))
                 elif self.gain_shape == "feature":
                     if self.gain_unshare:
-                        self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"].dimshuffle(0, 1, "x", "x")
+                        self.state_SUM[-1] = self.state_SUM[-1] * self.B.dimshuffle(self.dat["parameter"]["g"], 
+                                                                                    (0, 1, "x", "x"))
                     else:
-                        self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"].dimshuffle("x", 0, "x", "x")
+                        self.state_SUM[-1] = self.state_SUM[-1] * self.B.dimshuffle(self.dat["parameter"]["g"], 
+                                                                                    ("x", 0, "x", "x"))
                 elif self.gain_shape == "spatial":
                     if self.gain_unshare:
-                        self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"].dimshuffle(0, "x", 1, 2)
+                        self.state_SUM[-1] = self.state_SUM[-1] * self.B.dimshuffle(self.dat["parameter"]["g"], 
+                                                                                    (0, "x", 1, 2))
                     else:
-                        self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"].dimshuffle("x", "x", 0, 1)
+                        self.state_SUM[-1] = self.state_SUM[-1] * self.B.dimshuffle(self.dat["parameter"]["g"], 
+                                                                                    ("x", "x", 0, 1))
                 elif self.gain_shape == "scalar":
                     if self.gain_unshare:
-                        self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"][:,0].dimshuffle(0, "x", "x", "x")
+                        self.state_SUM[-1] = self.state_SUM[-1] * self.B.dimshuffle(self.dat["parameter"]["g"][:,0], 
+                                                                                    (0, "x", "x", "x"))
                     else:
                         self.state_SUM[-1] = self.state_SUM[-1] * self.dat["parameter"]["g"][0]
                 else:
@@ -269,33 +294,44 @@ class NeuronPool(object):
                 if self.bias_shape == "full":
                     if self.bias_unshare:
                         self.state_AB.append(self.state_SUM[-1] \
-                            + self.dat["parameter"]["b"].dimshuffle(0, 1, 2, 3))
+                            + self.B.dimshuffle(self.dat["parameter"]["b"], (0, 1, 2, 3)))
                     else:
                         self.state_AB.append(self.state_SUM[-1] \
-                            + self.dat["parameter"]["b"].dimshuffle("x", 0, 1, 2))
+                            + self.B.dimshuffle(self.dat["parameter"]["b"], 
+                                                ("x", 0, 1, 2)))
                 elif self.bias_shape == "feature":
                     if self.bias_unshare:
                         self.state_AB.append(self.state_SUM[-1] \
-                            + self.dat["parameter"]["b"].dimshuffle(0, 1, "x", "x"))
+                            + self.B.dimshuffle(self.dat["parameter"]["b"],
+                                                (0, 1, "x", "x")))
                     else:
                         self.state_AB.append(self.state_SUM[-1] \
-                            + self.dat["parameter"]["b"].dimshuffle("x", 0, "x", "x"))
+                            + self.B.dimshuffle(self.dat["parameter"]["b"], 
+                                                ("x", 0, "x", "x")))
                 elif self.bias_shape == "spatial":
                     if self.bias_unshare:
                         self.state_AB.append(self.state_SUM[-1] \
-                            + self.dat["parameter"]["b"].dimshuffle(0, "x", 1, 2))
+                            + self.B.dimshuffle(self.dat["parameter"]["b"], 
+                                                (0, "x", 1, 2)))
                     else:
                         self.state_AB.append(self.state_SUM[-1] \
-                            + self.dat["parameter"]["b"].dimshuffle("x", "x", 0, 1))
+                            + self.B.dimshuffle(self.dat["parameter"]["b"], 
+                                                ("x", "x", 0, 1)))
                 elif self.bias_shape == "scalar":
                     if self.bias_unshare:
                         self.state_AB.append(self.state_SUM[-1] \
-                            + self.dat["parameter"]["b"][:,0].dimshuffle(0, "x", "x", "x"))
+                            + self.B.dimshuffle(self.dat["parameter"]["b"][:,0], 
+                                                (0, "x", "x", "x")))
                     else:
                         self.state_AB.append(self.state_SUM[-1] + self.dat["parameter"]["b"][0])
                 else:
                     self.state_AB.append(self.state_SUM[-1])
 
+                # Evaluate activation function (which may be arbitrary).
+                # First, replace all functions with the local backend.
+                for fnc in self.B._FUNCTIONS:
+                    self.activation = self.activation.replace("B." + fnc, "self.B." + fnc)
+                # Insert state variable.
                 if self.activation.find('$') != -1:
                     try:
                         activation = self.activation.replace('$', 'self.state_AB[-1]')
@@ -303,7 +339,7 @@ class NeuronPool(object):
                     except:
                         print("\nError: Unable to evaluate activation function: " + str(self.activation))
                 else:
-                    self.state_AB[-1] = eval(self.activation)(self.state_AB[-1])
+                    self.state_AB[-1] = eval("self.B." + self.activation)(self.state_AB[-1])
 
                 # Sparcify state no activation. (Theano version dependent)
                 # if self.sparsify == 0:
@@ -316,29 +352,29 @@ class NeuronPool(object):
                 # Apply dropout.
                 if self.dropout is not None:
                     # Get mask for dropout.
-                    mask = self.dropout_srng.binomial(n=1, 
-                                                      p=1 - self.dat["parameter"]["dropout"],
-                                                      size=self.shape)
+                    mask = self.dropout_srng(n=1, 
+                                             p=1 - self.dat["parameter"]["dropout"],
+                                             size=self.shape)
                     
-                    self.state_SPA[-1] = self.state_SPA[-1] * T.cast(mask, theano.config.floatX)
+                    self.state_SPA[-1] = self.state_SPA[-1] * self.B.cast(mask, self.B._DTYPE)
 
                 # Apply zoneout.
                 if self.zoneout is not None \
                         and len(self.state) > 0 \
                         and self.state[-1] is not None:
                     # Get mask for zoneout.
-                    mask = self.zoneout_srng.binomial(n=1, 
-                                                      p=1 - self.dat["parameter"]["zoneout"],
-                                                      size=self.shape)
+                    mask = self.zoneout_srng(n=1, 
+                                             p=1 - self.dat["parameter"]["zoneout"],
+                                             size=self.shape)
                     
-                    self.state_SPA[-1] = self.state[-1] * (1.0 - T.cast(mask, theano.config.floatX)) \
-                                         + self.state_SPA[-1] * T.cast(mask, theano.config.floatX)
+                    self.state_SPA[-1] = self.state[-1] * (1.0 - self.B.cast(mask, self.B._DTYPE)) \
+                                         + self.state_SPA[-1] * self.B.cast(mask, self.B._DTYPE)
 
             # Set next state.
             if self.state_SPA[-1] is None:
                 self.state.append(self.state_SPA[-1])
             else:
-                self.state.append(T.extra_ops.cpu_contiguous(self.state_SPA[-1]))
+                self.state.append(self.B.cpu_contiguous(self.state_SPA[-1]))
             
             
             

@@ -22,6 +22,7 @@
 
 name: cifar10_small
 agents: 64
+backend: tensorflow
 neuron_pools:
     image:
         shape: [3, 32, 32]
@@ -38,24 +39,24 @@ neuron_pools:
         tags: [conv1]
         act: selu
         dropout: 0.25
-        device: cuda0
+        device: gpu:0
     conv2_1:
         shape: [64, 16, 16]
         tags: [conv2]
         act: selu
-        device: cuda0
+        device: gpu:0
     conv2_2:
         shape: [64, 8, 8]
         tags: [conv2]
         act: selu
         dropout: 0.25
-        device: cuda0
+        device: gpu:0
     dense:
         shape: [512, 1, 1]
         tags: [dense]
         act: selu
         dropout: 0.5
-        device: cuda0
+        device: gpu:0
     prediction:
         shape: [10, 1, 1]
         tags: [prediction]
@@ -66,6 +67,16 @@ synapse_pools:
         - [image]
         target: conv1_1
         rf: 3
+    c11_rnn:
+        source: [[conv1_1]]
+        target: conv1_1
+        rf: 1
+        init W_0_0: id_0.5
+    c12_rnn:
+        source: [[conv1_2]]
+        target: conv1_2
+        rf: 1
+        init W_0_0: id_0.5
     c11_c12:
         source:
         - [conv1_1]
@@ -93,7 +104,7 @@ plasticities:
     hidden_loss:
         type: loss
         loss_function: negloglikelihood
-        device: cuda0
+        device: gpu:0
         source: prediction
         source_t: 6
         target: label

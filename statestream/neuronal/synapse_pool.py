@@ -21,11 +21,7 @@ import numpy as np
 from statestream.utils.helper import is_scalar_shape
 from statestream.meta.synapse_pool import sp_shm_layout, sp_init, sp_get_dict
 from statestream.meta.neuron_pool import np_state_shape
-
-import theano
-import theano.tensor as T
-
-from statestream.neuronal.activations import selu, relu, Id, gaussian, elu, tanh, sigmoid, softmax, exp, neglog, log
+from statestream.backends.backends import import_backend
 
 
 
@@ -113,6 +109,8 @@ class SynapsePool(object):
         Returns
         -------
         """
+        # Import backend.
+        self.B = import_backend(None, None, name)
         # Get standard structures.
         self.name = name
         self.net = net
@@ -127,22 +125,43 @@ class SynapsePool(object):
         self.dat_layout = sp_shm_layout(self.name, self.net, self.param)
         self.dat = {}
         for t in ["parameter", "variables"]:
+            settable = True
             self.dat[t] = {}
             for i,i_l in self.dat_layout[t].items():
-                if i_l.type == "th":
+                if i_l.type == "backend":
                     if is_scalar_shape(i_l.shape):
-                        self.dat[t][i] = theano.shared(theano._asarray(0.0, dtype=theano.config.floatX),
-                                                                    borrow = True,
-                                                                    name = name + " " + i)
+                        self.dat[t][i] \
+                            = self.B.scalar(0.0, 
+                                            dtype=np.float32, 
+                                            borrow=True, 
+                                            name=name + "." + i,
+                                            settable=settable)
+
+#                        self.dat[t][i] = theano._asarray(0.0, dtype=theano.config.floatX),
+#                                                                    borrow = True,
+#                                                                    name = name + " " + i)
                     else:
                         if i_l.broadcastable is not None:
-                            self.dat[t][i] = theano.shared(np.zeros(i_l.shape, dtype=theano.config.floatX),
-                                                                        borrow=True,
-                                                                        name=name + " " + i, broadcastable=i_l.broadcastable)
+                            self.dat[t][i] = self.B.variable(np.zeros(i_l.shape, dtype=np.float32),
+                                                             dtype=np.float32,
+                                                             borrow=True,
+                                                             name=name + "." + i,
+                                                             broadcastable=i_l.broadcastable,
+                                                             settable=settable)
                         else:
-                            self.dat[t][i] = theano.shared(np.zeros(i_l.shape, dtype=theano.config.floatX),
-                                                                        borrow=True,
-                                                                        name=name + " " + i)
+                            self.dat[t][i] = self.B.variable(np.zeros(i_l.shape, dtype=np.float32), 
+                                                             dtype=np.float32,
+                                                             borrow=True,
+                                                             name=name + "." + i,
+                                                             settable=settable)
+#                        if i_l.broadcastable is not None:
+#                            self.dat[t][i] = theano.shared(np.zeros(i_l.shape, dtype=theano.config.floatX),
+#                                                                        borrow=True,
+#                                                                        name=name + " " + i, broadcastable=i_l.broadcastable)
+#                        else:
+#                            self.dat[t][i] = theano.shared(np.zeros(i_l.shape, dtype=theano.config.floatX),
+#                                                                        borrow=True,
+#                                                                        name=name + " " + i)
                 elif i_l.type == "np":
                     if is_scalar_shape(i_l.shape):
                         self.dat[t][i] = np.array([1,], dtype=i_l.dtype)
@@ -160,7 +179,7 @@ class SynapsePool(object):
         # Get / set noise.
         self.noise = self.p.get("noise", None)
         if self.noise != None:
-            self.noise_dist = theano.tensor.shared_randomstreams.RandomStreams(np.random.RandomState(42).randint(99999))
+            self.noise_dist = self.B.randomstream(np.random.RandomState(42).randint(99999), self.noise)
         
         # Get factor shape (all concat inputs of a factor must have this same shape).
         if "factor_shapes" in self.p:
@@ -285,11 +304,10 @@ class SynapsePool(object):
             # Handle transformer exception.
             if "tags" in self.p:
                 if "TRANSFORMER" in self.p["tags"]:
-                    from statestream.neuronal.spatial_transformer_dense import warp_transform
-                    self.post_synaptic.append(warp_transform(self.source_np[0][0].state[-1], 
-                                                             tgt_shape,
-                                                             self.source_np[1][0].state[-1][:,[0],:,:],
-                                                             self.source_np[1][0].state[-1][:,[1],:,:]))
+                    self.post_synaptic.append(self.B.warp_transform(self.source_np[0][0].state[-1], 
+                                                                    tgt_shape,
+                                                                    self.B.dimshuffle(self.source_np[1][0].state[-1][:,0,:,:], (0,'x',1,2)),
+                                                                    self.B.dimshuffle(self.source_np[1][0].state[-1][:,1,:,:], (0,'x',1,2))))
                     return
             # Generate graph to compute all factor outputs.
             # _SCALED_CONV will be a 2D list of theano variables holding
@@ -308,14 +326,14 @@ class SynapsePool(object):
                         if self.P_unshare[f][i]:
                             out_state = []
                             for a in range(self.net["agents"]):
-                                in_state = T.unbroadcast(self.source_np[f][i].state[-1][a,:,:,:][np.newaxis,:,:,:], 0)
-                                out_state.append(T.nnet.conv2d(in_state,
+                                in_state = self.B.unbroadcast(self.source_np[f][i].state[-1][a,:,:,:][np.newaxis,:,:,:], 0)
+                                out_state.append(self.B.conv2d(in_state,
                                                                self.dat["parameter"][P_name][a,:,:,:,:],
                                                                border_mode=(0, 0),
                                                                subsample=(1, 1)))
-                            ppp_state = T.concatenate(out_state)
+                            ppp_state = self.B.concatenate(out_state)
                         else:
-                            ppp_state = T.nnet.conv2d(self.source_np[f][i].state[-1], 
+                            ppp_state = self.B.conv2d(self.source_np[f][i].state[-1], 
                                                       self.dat["parameter"][P_name],
                                                       border_mode=(0, 0),
                                                       subsample=(1, 1))
@@ -327,7 +345,7 @@ class SynapsePool(object):
                         unshared_preshape = [self.net["agents"]]
                     # Apply weight function.
                     if self.weight_fnc[f][i] != "Id":
-                        weights_raw = eval(self.weight_fnc[f][i])(self.dat["parameter"][W_name])
+                        weights_raw = eval("self.B." + self.weight_fnc[f][i])(self.dat["parameter"][W_name])
                     else:
                         weights_raw = self.dat["parameter"][W_name]
                     # Broadcast weights if needed.
@@ -348,7 +366,7 @@ class SynapsePool(object):
                                      self.rf_size[f][i][0], 
                                      self.rf_size[f][i][1]]
                         # Generate matrix of ones with original weights shape.
-                        ones_weight_mat = theano.shared(np.ones(shape, dtype=np.float32))
+                        ones_weight_mat = self.B.ones(shape, dtype=np.float32)
                         # Multiply coefficient-wise.
                         weights = weights_raw * ones_weight_mat
                     else:
@@ -364,52 +382,52 @@ class SynapsePool(object):
                                     # across agents (samples in batch).
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode="half",
                                                                        subsample=(self.pooling[f][i], 1),
                                                                        filter_dilation=(self.dilation[f][i], 1)))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(ppp_state, 
-                                                                weights,
-                                                                border_mode="half",
-                                                                subsample=(self.pooling[f][i], 1),
-                                                                filter_dilation=(self.dilation[f][i], 1)))
+                                    _SCALED_CONV[-1].append(self.B.conv2d(ppp_state, 
+                                                                          weights,
+                                                                          border_mode="half",
+                                                                          subsample=(self.pooling[f][i], 1),
+                                                                          filter_dilation=(self.dilation[f][i], 1)))
                             else:
                                 if self.W_unshare[f][i]:
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode=(self.pad[f][i][0], 0),
                                                                        subsample=(self.pooling[f][i], 1)))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(ppp_state, 
+                                    _SCALED_CONV[-1].append(self.B.conv2d(ppp_state, 
                                                                           weights,
                                                                           border_mode=(self.pad[f][i][0], 0),
                                                                           subsample=(self.pooling[f][i], 1)))
                         elif self.pooling[f][i] <= -1:
                             # 1D upsampling.
-                            upsampled = T.extra_ops.repeat(ppp_state,
-                                                           -self.pooling[f][i],
-                                                           2)
+                            upsampled = self.B.repeat(ppp_state,
+                                                      -self.pooling[f][i],
+                                                      2)
                             if self.dilation[f][i] > 1:
                                 if self.W_unshare[f][i]:
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode="half",
                                                                        subsample=(1, 1),
                                                                        filter_dilation=(self.dilation[f][i], 1)))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(upsampled, 
+                                    _SCALED_CONV[-1].append(self.B.conv2d(upsampled, 
                                                                           weights,
                                                                           border_mode="half",
                                                                           subsample=(1, 1),
@@ -418,14 +436,14 @@ class SynapsePool(object):
                                 if self.W_unshare[f][i]:
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode=(self.pad[f][i][0], 0),
                                                                        subsample=(1, 1)))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(upsampled, 
+                                    _SCALED_CONV[-1].append(self.B.conv2d(upsampled, 
                                                                          weights,
                                                                          border_mode=(self.pad[f][i][0], 0),
                                                                          subsample=(1, 1)))
@@ -434,14 +452,14 @@ class SynapsePool(object):
                             if self.W_unshare[f][i]:
                                 out_state = []
                                 for a in range(self.net["agents"]):
-                                    in_state = T.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
-                                    out_state.append(T.nnet.conv2d(in_state,
+                                    in_state = self.B.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
+                                    out_state.append(self.B.conv2d(in_state,
                                                                    weights[a,:,:,:,:],
                                                                    border_mode=(0, 0),
                                                                    subsample=(1, 1)))
-                                _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                             else:
-                                _SCALED_CONV[-1].append(T.nnet.conv2d(ppp_state, 
+                                _SCALED_CONV[-1].append(self.B.conv2d(ppp_state, 
                                                                       weights,
                                                                       border_mode=(0, 0),
                                                                       subsample=(1, 1)))
@@ -454,15 +472,15 @@ class SynapsePool(object):
                                 if self.W_unshare[f][i]:
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode="half",
                                                                        subsample=(self.pooling[f][i], self.pooling[f][i]),
                                                                        filter_dilation=(self.dilation[f][i], self.dilation[f][i])))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(ppp_state, 
+                                    _SCALED_CONV[-1].append(self.B.conv2d(ppp_state, 
                                                                           weights,
                                                                           border_mode="half",
                                                                           subsample=(self.pooling[f][i], self.pooling[f][i]),
@@ -471,37 +489,37 @@ class SynapsePool(object):
                                 if self.W_unshare[f][i]:
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
                                                                        subsample=(self.pooling[f][i], self.pooling[f][i])))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(ppp_state, 
+                                    _SCALED_CONV[-1].append(self.B.conv2d(ppp_state, 
                                                                           weights,
                                                                           border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
                                                                           subsample=(self.pooling[f][i], self.pooling[f][i])))
                         elif self.pooling[f][i] <= -1:
                             # 2D upsampling.
-                            upsampled = T.extra_ops.repeat(T.extra_ops.repeat(ppp_state,
-                                                                              -self.pooling[f][i],
-                                                                              2),
-                                                             -self.pooling[f][i],
-                                                             3)
+                            upsampled = self.B.repeat(self.B.repeat(ppp_state,
+                                                                    -self.pooling[f][i],
+                                                                    2),
+                                                      -self.pooling[f][i],
+                                                      3)
                             if self.dilation[f][i] > 1:
                                 if self.W_unshare[f][i]:
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode="half",
                                                                        subsample=(1, 1),
                                                                        filter_dilation=(self.dilation[f][i], self.dilation[f][i])))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(upsampled, 
+                                    _SCALED_CONV[-1].append(self.B.conv2d(upsampled, 
                                                                           weights,
                                                                           border_mode="half",
                                                                           subsample=(1, 1),
@@ -510,15 +528,15 @@ class SynapsePool(object):
                                 if self.W_unshare[f][i]:
                                     out_state = []
                                     for a in range(self.net["agents"]):
-                                        in_state = T.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
-                                        out_state.append(T.nnet.conv2d(in_state,
+                                        in_state = self.B.unbroadcast(upsampled[a,:,:,:][np.newaxis,:,:,:], 0)
+                                        out_state.append(self.B.conv2d(in_state,
                                                                        weights[a,:,:,:,:],
                                                                        border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
                                                                        subsample=(1, 1)))
-                                    _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                    _SCALED_CONV[-1].append(self.B.concatenate(out_state))
 
                                 else:
-                                    _SCALED_CONV[-1].append(T.nnet.conv2d(upsampled, 
+                                    _SCALED_CONV[-1].append(self.B.conv2d(upsampled, 
                                                                           weights,
                                                                           border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
                                                                           subsample=(1, 1)))
@@ -527,14 +545,14 @@ class SynapsePool(object):
                             if self.W_unshare[f][i]:
                                 out_state = []
                                 for a in range(self.net["agents"]):
-                                    in_state = T.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
-                                    out_state.append(T.nnet.conv2d(in_state,
+                                    in_state = self.B.unbroadcast(ppp_state[a,:,:,:][np.newaxis,:,:,:], 0)
+                                    out_state.append(self.B.conv2d(in_state,
                                                                    weights[a,:,:,:,:],
                                                                    border_mode=(0, 0),
                                                                    subsample=(1, 1)))
-                                _SCALED_CONV[-1].append(T.concatenate(out_state))
+                                _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                             else:
-                                _SCALED_CONV[-1].append(T.nnet.conv2d(ppp_state, 
+                                _SCALED_CONV[-1].append(self.B.conv2d(ppp_state, 
                                                                       weights,
                                                                       border_mode=(0, 0),
                                                                       subsample=(1, 1)))
@@ -576,7 +594,7 @@ class SynapsePool(object):
                                  1,
                                  1]
                     # Generate zero state of factor shape
-                    zeros_state = theano.shared(np.zeros(shape, dtype=np.float32))
+                    zeros_state = self.B.zeros(shape, dtype=np.float32)
                     # Initialize factor with zero of correct shape.
                     _SCALED_CONV_SUM.append(zeros_state)
                 # Sum up all inputs for factor f (except for the
@@ -593,19 +611,19 @@ class SynapsePool(object):
                             _SCALED_CONV_SUM[f] += _SCALED_CONV[f][i].dimshuffle(0).dimshuffle(0,"x","x","x")
                 # (Add bias and) evaluate factor activation function.
                 if self.bias_shapes[f] is None:
-                    _SCALED_CONV_SUM[f] = eval(self.act[f])(_SCALED_CONV_SUM[f])
+                    _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f])
                 else:
                     if self.bias_shapes[f] == "full":
-                        _SCALED_CONV_SUM[f] = eval(self.act[f])(_SCALED_CONV_SUM[f] \
+                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
                                                                 + self.dat["parameter"][b_name].dimshuffle("x",0,1,2))
                     elif self.bias_shapes[f] == "feature":
-                        _SCALED_CONV_SUM[f] = eval(self.act[f])(_SCALED_CONV_SUM[f] \
+                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
                                                                 + self.dat["parameter"][b_name].dimshuffle("x",0,"x","x"))
                     elif self.bias_shapes[f] == "spatial":
-                        _SCALED_CONV_SUM[f] = eval(self.act[f])(_SCALED_CONV_SUM[f] \
+                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
                                                                 + self.dat["parameter"][b_name].dimshuffle("x","x",0,1))
                     elif self.bias_shapes[f] == "scalar":
-                        _SCALED_CONV_SUM[f] = eval(self.act[f])(_SCALED_CONV_SUM[f] \
+                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
                                                                 + self.dat["parameter"][b_name][0])
 
             # Initialize product.
@@ -619,7 +637,7 @@ class SynapsePool(object):
             # Alternatively we have to init it with a ones state.
             if init_with == -1:
                 # Generate ones state like target state.
-                scaled_conv = theano.shared(np.ones(tgt_shape, dtype=np.float32))
+                scaled_conv = self.B.ones(tgt_shape, dtype=np.float32)
             for f in range(self.no_factors):
                 if init_with != f:
                     if self.factor_shapes[f] == "full":
@@ -653,11 +671,11 @@ class SynapsePool(object):
                     if scaled_conv_maxout == None:
                         scaled_conv_maxout = t
                     else:
-                        scaled_conv_maxout = T.maximum(scaled_conv_maxout, t)
+                        scaled_conv_maxout = self.B.maximum(scaled_conv_maxout, t)
 
             # activation
             if self.ACT != "Id":
-                self.post_synaptic.append(eval(self.ACT)(scaled_conv_maxout))
+                self.post_synaptic.append(eval("self.B." + self.ACT)(scaled_conv_maxout))
             else:
                 self.post_synaptic.append(scaled_conv_maxout)
 
@@ -666,10 +684,10 @@ class SynapsePool(object):
             if self.noise == "normal":
                 self.post_synaptic[-1] += self.dat["parameter"]["noise_mean"] \
                                           + self.dat["parameter"]["noise_std"] \
-                                          * self.noise_dist.normal(self.target_np.shape)
+                                          * self.noise_dist(self.target_np.shape)
             elif self.noise == "uniform":
                 self.post_synaptic[-1] += (self.dat["parameter"]["noise_max"] - self.dat["parameter"]["noise_min"]) \
-                                          * self.noise_dist.normal(self.target_np.shape) \
+                                          * self.noise_dist(self.target_np.shape) \
                                           - self.dat["parameter"]["noise_min"]
 
                     

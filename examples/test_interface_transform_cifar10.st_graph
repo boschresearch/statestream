@@ -19,6 +19,7 @@
 
 name: test_transform_cifar10
 agents: 8
+backend: tensorflow
 neuron_pools:
     tcf10_image:
         shape: [3, 32, 32]

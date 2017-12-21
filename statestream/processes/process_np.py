@@ -21,6 +21,7 @@ import os
 
 from statestream.processes.process import STProcess
 from statestream.utils.helper import is_scalar_shape
+from statestream.backends.backends import import_backend
 
 
 
@@ -34,23 +35,21 @@ class ProcessNp(STProcess):
     def initialize(self):
         """Initialization of process for neuron-pool.
         """
-        # Import theano / device dependent modules.
-        # ---------------------------------------------------------------------
-        # Define session / process dependent compile directory.
-        base_compiledir = os.path.expanduser("~") + "/.statestream/compiledirs/" + str(self.id)
-        if not os.path.isdir(base_compiledir):
-            os.makedirs(base_compiledir)
-        # Set GPU and compile directory.
-        os.environ["THEANO_FLAGS"] = self.param["core"]["THEANO_FLAGS"] \
-                                     + ", device=" + self.device \
-                                     + ", base_compiledir=" + base_compiledir
-        # Here now theano may be imported and everything dependent on it.
-        import theano
-        import theano.tensor as T
+        if self.net.get("backend", "theano") == "theano":
+            # Define session / process dependent compile directory.
+            base_compiledir = os.path.expanduser("~") + "/.statestream/compiledirs/" + str(self.id)
+            if not os.path.isdir(base_compiledir):
+                os.makedirs(base_compiledir)
+            # Set GPU and compile directory.
+            os.environ["THEANO_FLAGS"] = self.param["core"]["THEANO_FLAGS"] \
+                                         + ", device=" + self.device \
+                                         + ", base_compiledir=" + base_compiledir
+        # Import backend.
+        self.B = import_backend(self.net, self.param, self.name)
         from statestream.neuronal.neuron_pool import NeuronPool
         from statestream.neuronal.synapse_pool import SynapsePool
         # Define random seed.
-        self.srng = T.shared_randomstreams.RandomStreams(np.random.RandomState(self.param["core"]["random_seed"]).randint(999999))
+        #self.srng = self.B.randomstream(np.random.RandomState(self.param["core"]["random_seed"]).randint(999999))
 
         # Build neuron / synapse pools.
         # ---------------------------------------------------------------------
@@ -89,7 +88,7 @@ class ProcessNp(STProcess):
 
         # Define central one-step function.
         updates = [(self.nps[self.name].state[0], self.nps[self.name].state[1])]
-        self.update_np_state = theano.function([], [], updates=updates)
+        self.update_np_state = self.B.function([], [], updates=updates)
 
         # Allocate structure to store updates between read / write phases.
         # ---------------------------------------------------------------------
@@ -167,14 +166,16 @@ class ProcessNp(STProcess):
             # Read necessary (all in-comming) np states / parameters.
             for n in self.nps:
                 #self.nps[n].state[0].set_value(np.ascontiguousarray(self.shm.dat[n]["state"]))
-                self.nps[n].state[0].set_value(np.require(self.shm.dat[n]["state"],
-                                                          requirements='C'))
+                self.B.set_value(self.nps[n].state[0], 
+                                 np.require(self.shm.dat[n]["state"], requirements='C'))
                 if n == self.name:
                     for par in self.shm.dat[n]["parameter"]:
                         if is_scalar_shape(self.shm.layout[n]["parameter"][par].shape):
-                            self.nps[n].dat["parameter"][par].set_value(self.shm.dat[n]["parameter"][par][0])
+                            self.B.set_value(self.nps[n].dat["parameter"][par],
+                                             self.shm.dat[n]["parameter"][par][0])
                         else:
-                            self.nps[n].dat["parameter"][par].set_value(self.shm.dat[n]["parameter"][par])
+                            self.B.set_value(self.nps[n].dat["parameter"][par],
+                                             self.shm.dat[n]["parameter"][par])
             # Read necessary (all in-comming) sp parameters.
             for s in self.sps:
                 if self.IPC_PROC["pause"][self.shm.proc_id[s][0]].value == 0:
@@ -187,15 +188,19 @@ class ProcessNp(STProcess):
                                 source_sp = self.net["synapse_pools"][s]["share params"][par][0]
                                 source_par = self.net["synapse_pools"][s]["share params"][par][1]
                         if is_scalar_shape(self.shm.layout[s]["parameter"][par].shape):
-                            self.sps[s].dat["parameter"][par].set_value(self.shm.dat[source_sp]["parameter"][source_par][0])
+                            self.B.set_value(self.sps[s].dat["parameter"][par],
+                                             self.shm.dat[source_sp]["parameter"][source_par][0])
                         else:
-                            self.sps[s].dat["parameter"][par].set_value(self.shm.dat[source_sp]["parameter"][source_par])
+                            self.B.set_value(self.sps[s].dat["parameter"][par],
+                                             self.shm.dat[source_sp]["parameter"][source_par])
                 else:
                     for par in self.shm.dat[s]["parameter"]:
                         if is_scalar_shape(self.shm.layout[s]["parameter"][par].shape):
-                            self.sps[s].dat["parameter"][par].set_value(0.0 * self.shm.dat[s]["parameter"][par][0])
+                            self.B.set_value(self.sps[s].dat["parameter"][par],
+                                             0.0 * self.shm.dat[s]["parameter"][par][0])
                         else:
-                            self.sps[s].dat["parameter"][par].set_value(0.0 * self.shm.dat[s]["parameter"][par])
+                            self.B.set_value(self.sps[s].dat["parameter"][par],
+                                             0.0 * self.shm.dat[s]["parameter"][par])
 
 
 
@@ -221,25 +226,26 @@ class ProcessNp(STProcess):
             try:
                 # Write to shared memory.
                 if self.prior_state_flag:
-                    self.shm.dat[self.name]["state"][:,:,:,:] = self.nps[self.name].state[0].get_value()[:,:,:,:] \
+                    self.shm.dat[self.name]["state"][:,:,:,:] = self.B.get_value(self.nps[self.name].state[0])[:,:,:,:] \
                                                                 + self.prior_state_value[:,:,:,:]
                 else:
-                    self.shm.dat[self.name]["state"][:,:,:,:] = self.nps[self.name].state[0].get_value()[:,:,:,:]
+                    self.shm.dat[self.name]["state"][:,:,:,:] = self.B.get_value(self.nps[self.name].state[0])[:,:,:,:]
             except:
                 print("Error: Copying theano -> shared mem failed for np: " + self.name)
                 print("    SHAPE(net)   : " + str(self.shm.layout[self.name]["state"].shape))
-                print("    SHAPE(theano): " + str(self.nps[self.name].state[0].get_value().shape))
+                print("    SHAPE(theano): " + str(self.B.get_value(self.nps[self.name].state[0]).shape))
             # Write np variables to shared memory.
             try:
                 for var in self.shm.dat[self.name]["variables"]:
                     self.shm.set_shm([self.name, "variables", var], 
-                                     self.nps[self.name].dat["variables"][var].get_value())
+                                     self.B.get_value(self.nps[self.name].dat["variables"][var]))
             except:
                 print("Error: Copying theano -> shared mem failed for np variable: " + self.name)
                 for var in self.shm.dat[self.name]["variables"]:
                     print("variable: " + str(var))
                     print("    IPC: " + str(self.shm.layout[self.name]["variables"][var].shape))
-                    print("    T  : " + str(self.nps[self.name].dat["variables"][var].get_value().shape))
+                    print("    T  : " + str(self.B.get_value(self.nps[self.name].dat["variables"][var]).shape))
         elif self.IPC_PROC["pause"][self.id].value == 2:
             # Real "off" flag for np, only write zero state.
             self.shm.dat[self.name]["state"].fill(0)
+

@@ -67,10 +67,10 @@ neuron_pools:
         act: gaussian
     np_explicit1:
         shape: [16, 16, 16]
-        act: $**2
+        act: $**2 + B.tanh($)
     np_explicit2:
         shape: [16, 16, 16]
-        act: T.exp($)
+        act: B.exp($) * B.sigmoid($)
     image:
         shape: [1, 32, 32]
         tags: [sensor]

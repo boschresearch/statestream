@@ -39,16 +39,16 @@ neuron_pools:
         shape: [32, 14, 14]
         act: relu
         dropout: 0.2
-        device: cuda0
+        device: gpu:0
     hidden2:
         shape: [10, 14, 14]
         act: relu
-        device: cuda0
+        device: gpu:0
     prediction:
         shape: [10, 56, 56]
         tags: [prediction]
         act: softmax
-        device: cuda0
+        device: gpu:0
 synapse_pools:
     img_h1:
         source:
@@ -70,7 +70,7 @@ plasticities:
     hidden_loss:
         type: loss
         loss_function: negloglikelihood
-        device: cuda0
+        device: gpu:0
         source: prediction
         source_t: 3
         target: label

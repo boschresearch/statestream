@@ -66,14 +66,14 @@ def plast_shm_layout(name, net, param):
     # -------------------------------------------------------------------------
     if "confidence_penalty" in p:
         shm_layout["parameter"]["confidence_penalty"] \
-            = ShmL("th", (), dtype, 0.0, 0.0, None)
+            = ShmL("backend", (), dtype, 0.0, 0.0, None)
     if "label_smoothing" in p:
         shm_layout["parameter"]["label_smoothing"] \
-            = ShmL("th", (), dtype, 0.0, 0.0, None)
+            = ShmL("backend", (), dtype, 0.0, 0.0, None)
 
     # The (splitted) loss of the loss-plasticity.
-    shm_layout["variables"]["loss0"] = ShmL("th", (), dtype, 0.0)
-    shm_layout["variables"]["loss1"] = ShmL("th", (), dtype, 0.0)
+    shm_layout["variables"]["loss0"] = ShmL("backend", (), dtype, 0.0)
+    shm_layout["variables"]["loss1"] = ShmL("backend", (), dtype, 0.0)
 
     # Adding difference, which we will call gradient for simplicity as variable.
     # -------------------------------------------------------------------------    
@@ -83,7 +83,7 @@ def plast_shm_layout(name, net, param):
             vs_tmp = np_shm_layout(P[1], net, param)
         elif P[0] == "sp":
             vs_tmp = sp_shm_layout(P[1], net, param)
-        shm_layout["variables"]["grad " + P[0] + " " + P[1] + " " + P[2]] = vs_tmp["parameter"][P[2]]
+        shm_layout["variables"]["grad." + P[0] + "." + P[1] + "." + P[2]] = vs_tmp["parameter"][P[2]]
 
     # Updates.
     # -------------------------------------------------------------------------

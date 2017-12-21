@@ -26,13 +26,13 @@ neuron_pools:
     hidden:
         shape: [64, 1, 1]
         act: relu
-        device: cuda0
+        device: gpu:0
     prediction:
         shape: [10, 1, 1]
-        device: cuda0
+        device: gpu:0
     error:
         shape: [10, 1, 1]
-        device: cuda0
+        device: gpu:0
 synapse_pools:
     sp_hidden:
         source: [[image]]

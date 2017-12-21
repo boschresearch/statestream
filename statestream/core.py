@@ -1276,7 +1276,7 @@ class StateStream(object):
         self.terminal.reset_term()
         
         # Comment for the last line.
-        print("Core: Last line of statestream code. Theano shutting down ...")
+        print("Core: Last line of statestream code. Backend shutting down ...")
             
             
             

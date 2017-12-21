@@ -48,22 +48,22 @@ modules:
                 shape: [32, 16, 16]
                 tags: [conv1, _my_np_tag]
                 dropout: 0.25
-                device: cuda0
+                device: gpu:0
             conv2_1:
                 shape: [64, 16, 16]
                 tags: [conv2, _my_np_tag]
-                device: cuda0
+                device: gpu:0
             conv2_2:
                 shape: [64, 8, 8]
                 tags: [conv2, _my_np_tag]
                 dropout: 0.25
-                device: cuda0
+                device: gpu:0
             dense:
                 shape: [512, 1, 1]
                 tags: [dense, _my_np_tag]
                 act: relu
                 dropout: 0.5
-                device: cuda0
+                device: gpu:0
             prediction:
                 shape: [10, 1, 1]
                 tags: [prediction]
@@ -106,7 +106,7 @@ modules:
             loss:
                 type: loss
                 loss_function: _my_loss_fcn
-                device: cuda0
+                device: gpu:0
                 source: prediction
                 source_t: 6
                 target: label

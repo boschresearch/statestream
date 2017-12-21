@@ -9,6 +9,9 @@
 [From one frame to the next](from_one_frame_to_the_next.md)
 -----------------------------------------------------------
 
+[Device handling](devices.md)
+-----------------------------
+
 User interfaces
 ---------------
 * [StateStream terminal](statestream_terminal.md)

@@ -22,6 +22,7 @@ import importlib
 
 from statestream.processes.process import STProcess
 from statestream.utils.helper import is_scalar_shape
+from statestream.backends.backends import import_backend
 
 
 
@@ -39,22 +40,12 @@ class ProcessPlast(STProcess):
     def initialize(self):
         """Plasticity dependent initialization.
         """
-        # Import theano / device dependent modules.
-        # ---------------------------------------------------------------------
-        # Define session / process dependent compile directory.
-        base_compiledir = os.path.expanduser("~") + "/.statestream/compiledirs/" + str(self.id)
-        if not os.path.isdir(base_compiledir):
-            os.makedirs(base_compiledir)
-        # Set GPU.
-        os.environ["THEANO_FLAGS"] = self.param["core"]["THEANO_FLAGS"] \
-                                     + ",device=" + self.device \
-                                     + ",base_compiledir=" + base_compiledir
-        # here now theano may be imported and everything dependent on it
-        import theano.tensor as T
+        # Import backend.
+        self.B = import_backend(self.net, self.param, self.name)
         from statestream.neuronal.neuron_pool import NeuronPool
         from statestream.neuronal.synapse_pool import SynapsePool
         # Define random seed.
-        self.srng = T.shared_randomstreams.RandomStreams(np.random.RandomState(self.param["core"]["random_seed"]).randint(999999))
+#        self.srng = self.B.randomstream(np.random.RandomState(self.param["core"]["random_seed"]).randint(999999))
 
         # Build nps / sps.
         # ---------------------------------------------------------------------
@@ -112,12 +103,15 @@ class ProcessPlast(STProcess):
         if self.IPC_PROC["pause"][self.id].value == 0 and self.frame_cntr % self.IPC_PROC["period"][self.id].value == self.IPC_PROC["period offset"][self.id].value:
             # Read necessary np states / parameters.
             for n in self.plasticity.nps:
-                self.plasticity.nps[n].state[0].set_value(self.shm.dat[n]["state"])
+                self.B.set_value(self.plasticity.nps[n].state[0],
+                                 self.shm.dat[n]["state"])
                 for par in self.shm.dat[n]["parameter"]:
                     if is_scalar_shape(self.shm.layout[n]["parameter"][par].shape):
-                        self.plasticity.nps[n].dat["parameter"][par].set_value(self.shm.dat[n]["parameter"][par][0])
+                        self.B.set_value(self.plasticity.nps[n].dat["parameter"][par],
+                                         self.shm.dat[n]["parameter"][par][0])
                     else:
-                        self.plasticity.nps[n].dat["parameter"][par].set_value(self.shm.dat[n]["parameter"][par])
+                        self.B.set_value(self.plasticity.nps[n].dat["parameter"][par],
+                                         self.shm.dat[n]["parameter"][par])
             # Read necessary sp parameters.
             for s in self.plasticity.sps:
                 if self.IPC_PROC["pause"][self.shm.proc_id[s][0]].value == 0:
@@ -130,26 +124,33 @@ class ProcessPlast(STProcess):
                                 source_sp = self.net["synapse_pools"][s]["share params"][par][0]
                                 source_par = self.net["synapse_pools"][s]["share params"][par][1]
                         if is_scalar_shape(self.shm.layout[s]["parameter"][par].shape):
-                            self.plasticity.sps[s].dat["parameter"][par].set_value(self.shm.dat[source_sp]["parameter"][source_par][0])
+                            self.B.set_value(self.plasticity.sps[s].dat["parameter"][par],
+                                             self.shm.dat[source_sp]["parameter"][source_par][0])
                         else:
-                            self.plasticity.sps[s].dat["parameter"][par].set_value(self.shm.dat[source_sp]["parameter"][source_par])
+                            self.B.set_value(self.plasticity.sps[s].dat["parameter"][par],
+                                             self.shm.dat[source_sp]["parameter"][source_par])
                 else:
                     for par in self.shm.dat[s]["parameter"]:
                         if is_scalar_shape(self.shm.layout[s]["parameter"][par].shape):
-                            self.plasticity.sps[s].dat["parameter"][par].set_value(0.0)
+                            self.B.set_value(self.plasticity.sps[s].dat["parameter"][par],
+                                             0.0)
                         else:
-                            self.plasticity.sps[s].dat["parameter"][par].set_value(0.0 * self.shm.dat[s]["parameter"][par])
+                            self.B.set_value(self.plasticity.sps[s].dat["parameter"][par],
+                                             0.0 * self.shm.dat[s]["parameter"][par])
             # Read necessary plast parameters.
             for par in self.shm.dat[self.name]["parameter"]:
                 if is_scalar_shape(self.shm.layout[self.name]["parameter"][par].shape):
-                    self.plasticity.dat["parameter"][par].set_value(self.shm.dat[self.name]["parameter"][par][0])
+                    self.B.set_value(self.plasticity.dat["parameter"][par],
+                                     self.shm.dat[self.name]["parameter"][par][0])
                 else:
-                    self.plasticity.dat["parameter"][par].set_value(self.shm.dat[self.name]["parameter"][par])
+                    self.B.set_value(self.plasticity.dat["parameter"][par],
+                                     self.shm.dat[self.name]["parameter"][par])
             # Read train/test split parameter.
             split = np.ones([self.net['agents'],], dtype=np.float32)
             if self.IPC_PROC['plast split'].value > 0 and not self.ignore_split:
                 split[0:int(self.IPC_PROC['plast split'].value)] = 0.0
-            self.plasticity.split.set_value(split)
+            self.B.set_value(self.plasticity.split,
+                             split)
 
 
 
@@ -163,41 +164,28 @@ class ProcessPlast(STProcess):
                 self.plasticity.update_parameter()
             
                 # Write plast variables to shared memory.
-                try:
-                    for var in self.shm.dat[self.name]["variables"]:
-                        if self.shm.layout[self.name]["variables"][var].type == "th":
-                            value = self.plasticity.dat["variables"][var].get_value()
-                        elif self.shm.layout[self.name]["variables"][var].type == "np":
-                            value = self.plasticity.dat["variables"][var]
-                        # Check for NaNs.
-                        if np.isnan(np.sum(value)):
-                            print("\nWarning: Plasticity " + self.name \
-                                   + " detected NaN in variable " + var + ".\n")
-                            value.fill(0)
-                            # Set system into pause mode.
-                            self.IPC_PROC["break"].value = 1
-                        # Assign value.
-                        self.shm.set_shm([self.name, "variables", var], 
-                                          value)
-
-
-
-                except:
-                    print("Error: Copying theano -> shared mem failed for plast variable: " + self.name)
-                    for var in self.shm.dat[self.name]["variables"]:
-                        print("variable: " + str(var))
-                        print("    IPC: " + str(self.shm.layout[self.name]["variables"][var].shape))
-                        if self.plasticity.variables_shape[var][0] == "th":
-                            print("    T  : " + str(self.plasticity.dat["variables"][var].get_value().shape))
-                        elif self.plasticity.variables_shape[var][0] == "tnp":
-                            print("    NP : " + str(self.plasticity.dat["variables"][var].shape))
+                for var in self.shm.dat[self.name]["variables"]:
+                    if self.shm.layout[self.name]["variables"][var].type == "backend":
+                        value = self.B.get_value(self.plasticity.dat["variables"][var])
+                    elif self.shm.layout[self.name]["variables"][var].type == "np":
+                        value = self.plasticity.dat["variables"][var]
+                    # Check for NaNs.
+                    if np.isnan(np.sum(value)):
+                        print("\nWarning: Plasticity " + self.name \
+                               + " detected NaN in variable " + var + ".\n")
+                        value.fill(0)
+                        # Set system into pause mode.
+                        self.IPC_PROC["break"].value = 1
+                    # Assign value.
+                    self.shm.set_shm([self.name, "variables", var], 
+                                      value)
             
                 # Write update for parameters to shared memory.
                 try:
                     for param, param_id in zip(self.plasticity.params, self.plasticity.params_id):
-                        par = param_id.split()
-                        if self.shm.layout[par[1]]["parameter"][par[2]].type == "th":
-                            value = param.get_value()
+                        par = param_id.split(".")
+                        if self.shm.layout[par[1]]["parameter"][par[2]].type == "backend":
+                            value = self.B.get_value(param)
                         elif self.shm.layout[par[1]]["parameter"][par[2]].type == "np":
                             value = param
                         # Check for NaNs.
@@ -213,22 +201,22 @@ class ProcessPlast(STProcess):
                 except:
                     print("Error: Copying theano -> shared mem failed for plast updates: " + self.name)
                     for param, param_id in zip(self.plasticity.params, self.plasticity.params_id):
-                        par = param_id.split()
+                        par = param_id.split(".")
                         print("param: " + str(param_id))
                         print("    IPC: " + str(self.shm.dat[self.name]["updates"][par[1]][par[2]].shape))
-                        print("    T  : " + str(param.get_value().shape))
+                        print("    T  : " + str(self.B.get_value(param).shape))
         else:
             # In off or pause mode only write zeros to update IPC.
             try:
                 for param, param_id in zip(self.plasticity.params, self.plasticity.params_id):
-                    par = param_id.split()
+                    par = param_id.split(".")
                     self.shm.dat[self.name]["updates"][par[1]][par[2]].fill(0.0)
             except:
                 print("Error: Copying theano -> shared mem failed for plast updates: " + self.name)
                 for param, param_id in zip(self.plasticity.params, self.plasticity.params_id):
-                    par = param_id.split()
+                    par = param_id.split(".")
                     print("param: " + str(param_id))
                     print("    IPC: " + str(self.shm.dat[self.name]["updates"][par[1]][par[2]].shape))
-                    print("    T  : " + str(param.get_value().shape))
+                    print("    T  : " + str(self.B.get_value(param).shape))
 
 

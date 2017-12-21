@@ -66,10 +66,10 @@ def plast_shm_layout(name, net, param):
         
     # Variables for hebbian learner.
     # -------------------------------------------------------------------------
-    shm_layout["variables"]["source(now)"] = ShmL("th", np_state_shape(net, p["source"]), dtype, 0.0)
-    shm_layout["variables"]["source(now-1)"] = ShmL("th", np_state_shape(net, p["source"]), dtype, 0.0)
-    shm_layout["variables"]["target(now)"] = ShmL("th", np_state_shape(net, p["target"]), dtype, 0.0)
-    shm_layout["variables"]["target(now-1)"] = ShmL("th", np_state_shape(net, p["target"]), dtype, 0.0)
+    shm_layout["variables"]["source(now)"] = ShmL("backend", np_state_shape(net, p["source"]), dtype, 0.0)
+    shm_layout["variables"]["source(now-1)"] = ShmL("backend", np_state_shape(net, p["source"]), dtype, 0.0)
+    shm_layout["variables"]["target(now)"] = ShmL("backend", np_state_shape(net, p["target"]), dtype, 0.0)
+    shm_layout["variables"]["target(now-1)"] = ShmL("backend", np_state_shape(net, p["target"]), dtype, 0.0)
 
     # Adding difference, which we will call gradient for simplicity as variable.
     # -------------------------------------------------------------------------    
@@ -79,7 +79,7 @@ def plast_shm_layout(name, net, param):
             vs_tmp = np_shm_layout(P[1], net, param)
         elif P[0] == "sp":
             vs_tmp = sp_shm_layout(P[1], net, param)
-        shm_layout["variables"]["grad " + P[0] + " " + P[1] + " " + P[2]] = vs_tmp["parameter"][P[2]]
+        shm_layout["variables"]["grad." + P[0] + "." + P[1] + "." + P[2]] = vs_tmp["parameter"][P[2]]
 
     # Return layout.
     return shm_layout

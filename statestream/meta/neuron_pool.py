@@ -133,22 +133,22 @@ def np_shm_layout(name, net, param):
 
     # Set bias parameter.
     if bias_shape == "full":
-        shm_layout["parameter"]["b"] = ShmL("th", 
+        shm_layout["parameter"]["b"] = ShmL("backend", 
                                             bias_preshape + np_shape[1:], 
                                             dtype, 
                                             0.0)
     elif bias_shape == "feature":
-        shm_layout["parameter"]["b"] = ShmL("th", 
+        shm_layout["parameter"]["b"] = ShmL("backend", 
                                             bias_preshape + [np_shape[1],], 
                                             dtype, 
                                             0.0)
     elif bias_shape == "spatial":
-        shm_layout["parameter"]["b"] = ShmL("th", 
+        shm_layout["parameter"]["b"] = ShmL("backend", 
                                             bias_preshape + [np_shape[2], np_shape[3]], 
                                             dtype, 
                                             0.0)
     elif bias_shape == "scalar":
-        shm_layout["parameter"]["b"] = ShmL("th", 
+        shm_layout["parameter"]["b"] = ShmL("backend", 
                                             bias_preshape + [1,], 
                                             dtype, 
                                             0.0)
@@ -158,22 +158,22 @@ def np_shm_layout(name, net, param):
 
     # Set gain parameter.
     if gain_shape == "full":
-        shm_layout["parameter"]["g"] = ShmL("th", 
+        shm_layout["parameter"]["g"] = ShmL("backend", 
                                             gain_preshape + np_shape[1:], 
                                             dtype, 
                                             1.0)
     elif gain_shape == "feature":
-        shm_layout["parameter"]["g"] = ShmL("th", 
+        shm_layout["parameter"]["g"] = ShmL("backend", 
                                             gain_preshape + [np_shape[1],], 
                                             dtype, 
                                             1.0)
     elif gain_shape == "spatial":
-        shm_layout["parameter"]["g"] = ShmL("th", 
+        shm_layout["parameter"]["g"] = ShmL("backend", 
                                             gain_preshape + [np_shape[2], np_shape[3]], 
                                             dtype, 
                                             1.0)
     elif gain_shape == "scalar":
-        shm_layout["parameter"]["g"] = ShmL("th", 
+        shm_layout["parameter"]["g"] = ShmL("backend", 
                                             gain_preshape + [1,], 
                                             dtype, 
                                             1.0)
@@ -185,20 +185,20 @@ def np_shm_layout(name, net, param):
     if "noise" in p:
         if p["noise"] == "normal":
             shm_layout["parameter"]["noise_mean"] \
-                = ShmL("th", (), dtype, 0.0)
+                = ShmL("backend", (), dtype, 0.0)
             shm_layout["parameter"]["noise_std"] \
-                = ShmL("th", (), dtype, 1.0, 0.0, None)
+                = ShmL("backend", (), dtype, 1.0, 0.0, None)
         elif p["noise"] == "uniform":
-            shm_layout["parameter"]["noise_min"] = ShmL("th", (), dtype, -1.0)
-            shm_layout["parameter"]["noise_max"] = ShmL("th", (), dtype, 1.0)
+            shm_layout["parameter"]["noise_min"] = ShmL("backend", (), dtype, -1.0)
+            shm_layout["parameter"]["noise_max"] = ShmL("backend", (), dtype, 1.0)
     # Check for dropout.
     if "dropout" in p:
         shm_layout["parameter"]["dropout"] \
-            = ShmL("th", (), dtype, 1e-5, 0.0, 1.0)
+            = ShmL("backend", (), dtype, 1e-5, 0.0, 1.0)
     # Check for zoneout.
     if "zoneout" in p:
         shm_layout["parameter"]["zoneout"] \
-            = ShmL("th", (), dtype, 1e-5, 0.0, 1.0)
+            = ShmL("backend", (), dtype, 1e-5, 0.0, 1.0)
 
     # Add layout for variables.
     # -------------------------------------------------------------------------
@@ -206,7 +206,7 @@ def np_shm_layout(name, net, param):
 
     # Add layout for state.
     # -------------------------------------------------------------------------
-    shm_layout["state"] = ShmL("th", np_shape, dtype, 0.0)
+    shm_layout["state"] = ShmL("backend", np_shape, dtype, 0.0)
 
     # Return final layout.
     return shm_layout

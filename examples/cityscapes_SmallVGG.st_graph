@@ -24,7 +24,7 @@ name: cityscapes_SmallVGG
 tag_specs:
     conv:
         act: relu
-        device: cuda0
+        device: gpu:0
 agents: 6
 neuron_pools:
     image:
@@ -63,30 +63,30 @@ neuron_pools:
     conv3_3:
         shape: [128, 64, 32]
         tags: [conv]
-        device: cuda0
+        device: gpu:0
     conv4_1:
         shape: [256, 32, 16]
         tags: [conv]
-        device: cuda0
+        device: gpu:0
     conv4_2:
         shape: [256, 32, 16]
         tags: [conv]
-        device: cuda0
+        device: gpu:0
     conv4_3:
         shape: [256, 32, 16]
         tags: [conv]
-        device: cuda0
+        device: gpu:0
     dense1:
         shape: [512, 32, 16]
         tags: [dense]
-        device: cuda0
+        device: gpu:0
     prediction:
         shape: [19, 32, 16]
         tags: [prediction]
     us1:
         shape: [19, 128, 64]
         tags: [upsample]
-        device: cuda0
+        device: gpu:0
         act: softmax
     pred_class:
         shape: [3, 128, 64]
@@ -172,7 +172,7 @@ plasticities:
     full_loss_1:
         type: loss
         loss_function: negloglikelihood
-        device: cuda0
+        device: gpu:0
         source: us1
         source_t: 13
         target: label
@@ -199,7 +199,7 @@ plasticities:
     full_loss_2:
         type: loss
         loss_function: negloglikelihood
-        device: cuda0
+        device: gpu:0
         source: us1
         source_t: 13
         target: label

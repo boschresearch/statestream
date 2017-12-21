@@ -27,6 +27,7 @@ DEFAULT_CORE_PARAMETER = {
     'temporal_memory': [1],
     'random_seed': 42,
     'max_processes': 2**12,
+    'visible_devices': [0, 1],
     'dtype_default': 'np.float32',
     'profiler_window': 16
 }

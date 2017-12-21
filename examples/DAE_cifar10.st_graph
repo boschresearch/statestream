@@ -30,12 +30,12 @@ neuron_pools:
     encoder:
         shape: [32, 32, 32]
         tags: [encoded]
-        device: cuda0
+        device: gpu:0
     decoder:
         shape: [3, 32, 32]
         tags: [decoded]
         act: sigmoid
-        device: cuda0
+        device: gpu:0
 synapse_pools:
     ret_noise:
         source:
@@ -61,7 +61,7 @@ plasticities:
         source_t: 3
         target: image
         target_t: 0
-        device: cuda0
+        device: gpu:0
         optimizer: adam
         lr: 1e-5
         decay: 0.999

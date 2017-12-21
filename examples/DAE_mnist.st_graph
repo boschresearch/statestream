@@ -59,7 +59,7 @@ plasticities:
         source_t: 3
         target: image
         target_t: 0
-        device: cuda0
+        device: gpu:0
         optimizer: adam
         lr: 1e-4
         decay: 0.999

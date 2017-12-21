@@ -48,22 +48,22 @@ modules:
                 shape: [32, 16, 16]
                 tags: [conv1, _my_np_tag]
                 dropout: 0.25
-                device: cuda0
+                device: gpu:0
             conv2_1:
                 shape: [64, 16, 16]
                 tags: [conv2, _my_np_tag]
-                device: cuda0
+                device: gpu:0
             conv2_2:
                 shape: [64, 8, 8]
                 tags: [conv2, _my_np_tag]
                 dropout: 0.25
-                device: cuda0
+                device: gpu:0
             dense:
                 shape: [512, 1, 1]
                 tags: [dense, _my_np_tag]
                 act: relu
                 dropout: 0.5
-                device: cuda0
+                device: gpu:0
             prediction:
                 shape: [10, 1, 1]
                 tags: [prediction]
@@ -106,7 +106,7 @@ modules:
             loss:
                 type: loss
                 loss_function: categorical_crossentropy
-                device: cuda0
+                device: gpu:0
                 bottleneck: 0.9
                 source: prediction
                 source_t: 6
@@ -168,7 +168,7 @@ plasticities:
     multi_loss_c21:
         type: loss
         loss_function: categorical_crossentropy
-        device: cuda0
+        device: gpu:0
         bottleneck: 0.9
         source: multi_prediction
         source_t: 5
@@ -190,7 +190,7 @@ plasticities:
     multi_loss_c12:
         type: loss
         loss_function: categorical_crossentropy
-        device: cuda0
+        device: gpu:0
         bottleneck: 0.9
         source: multi_prediction
         source_t: 4
@@ -210,7 +210,7 @@ plasticities:
     multi_loss_c11:
         type: loss
         loss_function: categorical_crossentropy
-        device: cuda0
+        device: gpu:0
         bottleneck: 0.9
         source: multi_prediction
         source_t: 3

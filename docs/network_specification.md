@@ -15,6 +15,7 @@ The graph of a network is specified in an .st_graph file using the yaml format. 
 * **modules** (type: dict): Optional. This dictionary may specify [modules](modules.md) for more efficient network specifications.
 * **tag_specs** (type: dict): Optional. This contains the listing of all used [tag specifications](tag_specification.md).
 * **globals** (type: dict): Optional. This contains the listing of all [global variables](globals.md) used in the specification.
+* **backend** (type: string): Optional. This specifies the default backend used by every item. At the moment, two backends are supported: __theano__ and __tensorflow__. The default default backend is theano. In general, statestream enables using different backends for different items at the same time (e.g. part of the network uses theano while another part uses tensorflow), but this feature is not yet enabled.
 
 Statestream reads the network specification and parses the contained dictionary into a new network dictionary where all basic network items are specified explicitly. This explicit network is initialized at the beginning with the explicitly given basic items and modified afterwards through the follwing mechanisms in this order:
 

@@ -47,19 +47,19 @@ neuron_pools:
         shape: [16, 14, 14]
         act: relu
         tags: [hidden]
-        device: cuda1
+        device: gpu:0
     hidden2:
         shape: [32, 7, 7]
         act: relu
         tags: [hidden]
         dropout: 0.1
-        device: cuda1
+        device: gpu:0
     hidden3:
         shape: [128, 1, 1]
         act: relu
         tags: [hidden]
         dropout: 0.25
-        device: cuda1
+        device: gpu:0
     prediction:
         shape: [10, 1, 1]
         act: softmax
@@ -91,7 +91,7 @@ plasticities:
         type: loss
         loss_function: negloglikelihood
         source: prediction
-        device: cuda1
+        device: gpu:0
         source_t: 4
         target: label
         target_t: 0
@@ -107,7 +107,7 @@ plasticities:
         type: loss
         loss_function: negloglikelihood
         source: prediction
-        device: cuda1
+        device: gpu:0
         source_t: 3
         target: label
         target_t: 0
@@ -122,7 +122,7 @@ plasticities:
         type: loss
         loss_function: negloglikelihood
         source: prediction
-        device: cuda1
+        device: gpu:0
         source_t: 2
         target: label
         target_t: 0

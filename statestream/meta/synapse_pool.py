@@ -88,12 +88,12 @@ def sp_shm_layout(name, net, param):
     if "noise" in p:
         if p["noise"] == "normal":
             shm_layout["parameter"]["noise_mean"] \
-                = ShmL("th", (), dtype, 0.0)
+                = ShmL("backend", (), dtype, 0.0)
             shm_layout["parameter"]["noise_std"] \
-                = ShmL("th", (), dtype, 1.0, 0.0, None)
+                = ShmL("backend", (), dtype, 1.0, 0.0, None)
         elif p["noise"] == "uniform":
-            shm_layout["parameter"]["noise_min"] = ShmL("th", (), dtype, 0.0)
-            shm_layout["parameter"]["noise_max"] = ShmL("th", (), dtype, 0.0)
+            shm_layout["parameter"]["noise_min"] = ShmL("backend", (), dtype, 0.0)
+            shm_layout["parameter"]["noise_max"] = ShmL("backend", (), dtype, 0.0)
     # Dependent on number of factors determine layout.
     no_factors = len(p["source"])
 
@@ -200,7 +200,7 @@ def sp_shm_layout(name, net, param):
             if ppp_dims[f][i] > 0:
                 source_feat_shape = ppp_dims[f][i]
                 shm_layout["parameter"][P_name] \
-                    = ShmL("th",
+                    = ShmL("backend",
                            P_preshape + [ppp_dims[f][i],
                            snps_shape[f][i][1],
                            1,
@@ -210,7 +210,7 @@ def sp_shm_layout(name, net, param):
             # Finally set shape of W_f_i.
             if weight_shapes[f][i] == "full":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [target_features,
                             source_feat_shape, 
                             rf_size_x, 
@@ -219,7 +219,7 @@ def sp_shm_layout(name, net, param):
                            "xavier")
             elif weight_shapes[f][i] == "spatial":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [1,
                             1, 
                             rf_size_x, 
@@ -229,7 +229,7 @@ def sp_shm_layout(name, net, param):
                            broadcastable=[True, True, False, False])
             elif weight_shapes[f][i] == "feature":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [target_features,
                             source_feat_shape, 
                             1, 
@@ -239,7 +239,7 @@ def sp_shm_layout(name, net, param):
                            broadcastable=[False, False, True, True])
             elif weight_shapes[f][i] == "src_feature":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [1,
                             source_feat_shape, 
                             1, 
@@ -249,7 +249,7 @@ def sp_shm_layout(name, net, param):
                            broadcastable=[True, False, True, True])
             elif weight_shapes[f][i] == "tgt_feature":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [target_features,
                             1, 
                             1, 
@@ -259,7 +259,7 @@ def sp_shm_layout(name, net, param):
                            broadcastable=[False, True, True, True])
             elif weight_shapes[f][i] == "src_spatial":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [1,
                             source_feat_shape, 
                             rf_size_x, 
@@ -269,7 +269,7 @@ def sp_shm_layout(name, net, param):
                            broadcastable=[True, False, False, False])
             elif weight_shapes[f][i] == "tgt_spatial":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [target_features,
                             1, 
                             rf_size_x, 
@@ -279,7 +279,7 @@ def sp_shm_layout(name, net, param):
                            broadcastable=[False, True, False, False])
             elif weight_shapes[f][i] == "scalar":
                 shm_layout["parameter"][W_name] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            W_preshape + [1,
                             1, 
                             1, 
@@ -292,25 +292,25 @@ def sp_shm_layout(name, net, param):
         if bias_shapes is not None:
             if bias_shapes[f] == "full":
                 shm_layout["parameter"]["b_" + str(f)] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            [tnp_shape[1], tnp_shape[2], tnp_shape[3]], 
                            dtype, 
                            0.0)
             elif bias_shapes[f] == "feature":
                 shm_layout["parameter"]["b_" + str(f)] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            [tnp_shape[1],], 
                            dtype, 
                            0.0)
             elif bias_shapes[f] == "spatial":
                 shm_layout["parameter"]["b_" + str(f)] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            [tnp_shape[2], tnp_shape[3]], 
                            dtype, 
                            0.0)
             elif bias_shapes[f] == "scalar":
                 shm_layout["parameter"]["b_" + str(f)] \
-                    = ShmL("th", 
+                    = ShmL("backend", 
                            [1,], 
                            dtype,
                            0.0)
@@ -405,6 +405,21 @@ def sp_init(net, name, dat_name, dat_layout, mode=None):
                     for f in range(dat_layout.shape[0]):
                         dat_value[f, f, dat_layout.shape[2] // 2, dat_layout.shape[3] // 2] \
                             = 1.0
+                elif init_as.startswith("id_"):
+                    # Determine parameter.
+                    try:
+                        x_par = float(init_as.split("_")[1])
+                    except:
+                        x_par = 1.0
+                    dat_value = np.zeros(dat_layout.shape, dtype=dat_layout.dtype)
+                    # Assert source features equal target features.
+                    assert (dat_layout.shape[0] == dat_layout.shape[1]), \
+                        "ERROR during init of sp " + str(name) \
+                        + ": init as id requires same source and target features."
+                    # Loop over all target features.
+                    for f in range(dat_layout.shape[0]):
+                        dat_value[f, f, dat_layout.shape[2] // 2, dat_layout.shape[3] // 2] \
+                            = x_par
                 elif init_as == "-id":
                     dat_value = np.zeros(dat_layout.shape, dtype=dat_layout.dtype)
                     # Assert source features equal target features.

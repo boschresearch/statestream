@@ -64,12 +64,12 @@ def plast_shm_layout(name, net, param):
 
     # Parameter for regularizer.    
     # -------------------------------------------------------------------------
-    shm_layout["parameter"]["L1"] = ShmL("th", (), dtype, 0.0, 0.0, None)
-    shm_layout["parameter"]["L2"] = ShmL("th", (), dtype, 0.0, 0.0, None)
+    shm_layout["parameter"]["L1"] = ShmL("backend", (), dtype, 0.0, 0.0, None)
+    shm_layout["parameter"]["L2"] = ShmL("backend", (), dtype, 0.0, 0.0, None)
         
     # Variables for regularizer.
     # -------------------------------------------------------------------------
-    shm_layout["variables"]["loss"] = ShmL("th", (), dtype, 0.0)
+    shm_layout["variables"]["loss"] = ShmL("backend", (), dtype, 0.0)
 
     # Adding difference, which we will call gradient for simplicity as variable.
     # -------------------------------------------------------------------------    
@@ -79,7 +79,7 @@ def plast_shm_layout(name, net, param):
             vs_tmp = np_shm_layout(P[1], net, param)
         elif P[0] == "sp":
             vs_tmp = sp_shm_layout(P[1], net, param)
-        shm_layout["variables"]["grad " + P[0] + " " + P[1] + " " + P[2]] = vs_tmp["parameter"][P[2]]
+        shm_layout["variables"]["grad." + P[0] + "." + P[1] + "." + P[2]] = vs_tmp["parameter"][P[2]]
 
     # Return layout.
     return shm_layout

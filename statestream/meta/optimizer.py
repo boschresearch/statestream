@@ -49,7 +49,7 @@ def grad_desc_shm_layout(name, net, param):
     shm_layout["parameter"] = {}
     shm_layout["variables"] = {}
     # Add learning rate.
-    shm_layout["parameter"]["lr"] = ShmL("th", (), dtype, 1e-3, 0.0, None)
+    shm_layout["parameter"]["lr"] = ShmL("backend", (), dtype, 1e-3, 0.0, None)
     # Return layout.
     return shm_layout
 
@@ -82,13 +82,13 @@ def adam_shm_layout(name, net, param):
     shm_layout["variables"] = {}
     # Add parameters.
     shm_layout["parameter"]["lr"] \
-        = ShmL("th", (), dtype, 1e-3, 0.0, None)
+        = ShmL("backend", (), dtype, 1e-3, 0.0, None)
     shm_layout["parameter"]["decay"] \
-        = ShmL("th", (), dtype, 0.99, 0.0, None)
+        = ShmL("backend", (), dtype, 0.99, 0.0, None)
     shm_layout["parameter"]["momentum"] \
-        = ShmL("th", (), dtype, 0.999, 0.0, None)
+        = ShmL("backend", (), dtype, 0.999, 0.0, None)
     # Add variables.
-    shm_layout["variables"]["t"] = ShmL("th", (), dtype, 0, 0, None)
+    shm_layout["variables"]["t"] = ShmL("backend", (), dtype, 0, 0, None)
     # Need moments + varianc for all to be updated parameters.
     for par in range(len(p["parameter"])):
         P = p["parameter"][par]
@@ -96,9 +96,9 @@ def adam_shm_layout(name, net, param):
             vs_tmp = np_shm_layout(P[1], net, param)
         elif P[0] == "sp":
             vs_tmp = sp_shm_layout(P[1], net, param)
-        shm_layout["variables"]["moments " + P[0] + " " + P[1] + " " + P[2]] \
+        shm_layout["variables"]["moments." + P[0] + "." + P[1] + "." + P[2]] \
             = vs_tmp["parameter"][P[2]]
-        shm_layout["variables"]["varianc " + P[0] + " " + P[1] + " " + P[2]] \
+        shm_layout["variables"]["varianc." + P[0] + "." + P[1] + "." + P[2]] \
             = vs_tmp["parameter"][P[2]]
 
     # Return layout.
@@ -133,11 +133,11 @@ def rmsprop_shm_layout(name, net, param):
     shm_layout["variables"] = {}
     # Add parameters.
     shm_layout["parameter"]["lr"] \
-        = ShmL("th", (), dtype, 1e-3, 0.0, None)
+        = ShmL("backend", (), dtype, 1e-3, 0.0, None)
     shm_layout["parameter"]["rho"] \
-        = ShmL("th", (), dtype, 0.9, 0.0, None)
+        = ShmL("backend", (), dtype, 0.9, 0.0, None)
     # Add variables.
-    shm_layout["variables"]["t"] = ShmL("th", (), dtype, 0, 0, None)
+    shm_layout["variables"]["t"] = ShmL("backend", (), dtype, 0, 0, None)
     # Need moments + varianc for all to be updated parameters.
     for par in range(len(p["parameter"])):
         P = p["parameter"][par]
@@ -145,7 +145,7 @@ def rmsprop_shm_layout(name, net, param):
             vs_tmp = np_shm_layout(P[1], net, param)
         elif P[0] == "sp":
             vs_tmp = sp_shm_layout(P[1], net, param)
-        shm_layout["variables"]["accumulation " + P[0] + " " + P[1] + " " + P[2]] \
+        shm_layout["variables"]["accumulation." + P[0] + "." + P[1] + "." + P[2]] \
             = vs_tmp["parameter"][P[2]]
 
     # Return layout.

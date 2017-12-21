@@ -36,13 +36,13 @@ modules:
                 shape: [10, 1, 1]
             h1:
                 shape: [16, 14, 14]
-                device: cuda7
+                device: gpu:0
             h2:
                 shape: [32, 7, 7]
-                device: cuda7
+                device: gpu:0
             h3:
                 shape: [128, 1, 1]
-                device: cuda7
+                device: gpu:0
             pred:
                 shape: [10, 1, 1]
                 act: softmax
@@ -109,7 +109,7 @@ plasticities:
         type: loss
         loss_function: negloglikelihood
         source: imp_pred
-        device: cuda7
+        device: gpu:0
         source_t: 4
         target: imp_label
         target_t: 0
@@ -127,7 +127,7 @@ plasticities:
         type: loss
         loss_function: minimize
         source: exp_loss
-        device: cuda7
+        device: gpu:0
         source_t: 5
         optimizer: adam
         lr: 1e-4

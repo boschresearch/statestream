@@ -37,7 +37,7 @@ Some cornerstones
 Implementation:
 
 * Networks are specified as yaml files.
-* For now, statestream uses Theano as backend.
+* For now, statestream supports Theano (default) or Tensorflow as backend.
 
 ------------------------------------------------------------------------------
 
@@ -92,10 +92,7 @@ source activate statestream
 The statestream toolbox requires the following python packages:
 
 * [Python 3.5](https://www.python.org/)
-* [Theano >= 0.9.0](http://deeplearning.net/software/theano/#): Please follow [these instructions](http://deeplearning.net/software/theano/install_ubuntu.html) for installation.
-* [NumPy >= 1.9.1 <= 1.12](http://www.numpy.org/): This is a Theano requirement.
-* [SciPy >= 0.14 <0.17.1](https://scipy.org/): This is a Theano requirement.
-* [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms): This is a Theano requirement.
+* [NumPy >= 1.9.1 <= 1.12](http://www.numpy.org/): Basic mathematical tooling.
 * [Pygame >= 1.9](http://www.pygame.org/): This is the main library used for online visualization.
 * [ruamel_yaml](https://pypi.python.org/pypi/ruamel.yaml): This is used to specify network architectures.
 * [SharedArray 2.0.2](https://pypi.python.org/pypi/SharedArray): This is used for inter-process communication.
@@ -103,11 +100,23 @@ The statestream toolbox requires the following python packages:
 * [scikit-image](http://scikit-image.org/): This library is used for image handling.
 * [Matplotlib](https://matplotlib.org/): Used to enhance visualization with Pygame.
 
+To use the theano backend, the following packages are required:
+
+* [Theano >= 0.9.0](http://deeplearning.net/software/theano/#): Please follow [these instructions](http://deeplearning.net/software/theano/install_ubuntu.html) for installation.
+* [SciPy >= 0.14 <0.17.1](https://scipy.org/): This is a Theano requirement.
+* [BLAS](https://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms): This is a Theano requirement.
+
+To use the tensorflow backend, the following packages are required:
+
+* [Tensorflow >= 1.4](https://www.tensorflow.org/): Please follow 
+
+
 These requirements can be installed with:
 
 ```
 conda install numpy scipy mkl theano pygpu scikit-image ruamel_yaml matplotlib h5py
 pip install pygame sharedarray
+pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.4.0-cp35-cp35m-linux_x86_64.whl
 ```
 
 ------------------------------------------------------------------------------
@@ -184,8 +193,9 @@ Wed, 21 Dec 2016 12:44:31 @ 00000732 << <<
 
 To end the demonstration, enter **exit** in the statestream terminal.
 
-Before running other provided examples, please see the network [specification](docs/network_specification.md) and adapt especially paths and devices specified in the **st_graph** example files. For more information on the statestream terminal and visualization, please visit the [documentation](docs/README.md). Good places to start further reading are:
+Before running other provided examples, please set __visible_devices__ in **~/.statestream/stcore.yml** configuration file and read documentation on [devices](docs/devices.md). Also see the network [specification](docs/network_specification.md) and adapt especially paths and local devices specified in the **st_graph** example files. For more information on the statestream terminal and visualization, please visit the [documentation](docs/README.md). Good places to start further reading are:
 
+* [Device handling](docs/devices.md)
 * [Getting creative](docs/getting_creative.md)
 * [Visualization tutorial](docs/visualization.md)
 * [Network specification](docs/network_specification.md)
@@ -206,4 +216,6 @@ License
 
 The statestream toolbox is open-sourced under the Apache-2.0 license. See the
 [LICENSE](LICENSE) file for details.
+
+For a list of other open source components included in the statestream toolbox, see the file [3rd-party-licenses.txt](3rd-party-licenses.txt).
 

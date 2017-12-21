@@ -19,9 +19,7 @@
 import importlib
 
 from statestream.neuronal.plasticity import Plasticity
-
-import theano
-import theano.tensor as T
+from statestream.backends.backends import import_backend
 
 
 """
@@ -39,37 +37,40 @@ class Plasticity_L_regularizer(Plasticity):
         # Initialize parent ProcessIf class.
         Plasticity.__init__(self, name, net, param, mn, nps, sps)
         
+        # Import backend.
+        self.B = import_backend(None, None, name)
+
         # Define loss_function.
         # ---------------------------------------------------------------------
         # Begin with first parameter under regularization.
         p = self.p["parameter"][0]
         if p[0] == "np":
-            self.loss = self.dat["parameter"]["L1"] * T.sum(abs(self.nps[p[1]].dat["parameter"][p[2]])) \
-                        + self.dat["parameter"]["L2"] * T.sum(self.nps[p[1]].dat["parameter"][p[2]]**2)
+            self.loss = self.dat["parameter"]["L1"] * self.B.sum(self.B.abs(self.nps[p[1]].dat["parameter"][p[2]])) \
+                        + self.dat["parameter"]["L2"] * self.B.sum(self.nps[p[1]].dat["parameter"][p[2]]**2)
         elif p[0] == "sp":
-            self.loss = self.dat["parameter"]["L1"] * T.sum(abs(self.sps[p[1]].dat["parameter"][p[2]])) \
-                        + self.dat["parameter"]["L2"] * T.sum(self.sps[p[1]].dat["parameter"][p[2]]**2)
+            self.loss = self.dat["parameter"]["L1"] * self.B.sum(self.B.abs(self.sps[p[1]].dat["parameter"][p[2]])) \
+                        + self.dat["parameter"]["L2"] * self.B.sum(self.sps[p[1]].dat["parameter"][p[2]]**2)
         # Now loop over rest of to be regularized parameter.
         for p_idx in range(len(self.p["parameter"]) - 1):
             p = self.p["parameter"][p_idx + 1]
             if p[0] == "np":
-                self.loss += self.dat["parameter"]["L1"] * T.sum(abs(self.nps[p[1]].dat["parameter"][p[2]])) \
-                             + self.dat["parameter"]["L2"] * T.sum(self.nps[p[1]].dat["parameter"][p[2]]**2)
+                self.loss += self.dat["parameter"]["L1"] * self.B.sum(self.B.abs(self.nps[p[1]].dat["parameter"][p[2]])) \
+                             + self.dat["parameter"]["L2"] * self.B.sum(self.nps[p[1]].dat["parameter"][p[2]]**2)
             elif p[0] == "sp":
-                self.loss += self.dat["parameter"]["L1"] * T.sum(abs(self.sps[p[1]].dat["parameter"][p[2]])) \
-                             + self.dat["parameter"]["L2"] * T.sum(self.sps[p[1]].dat["parameter"][p[2]]**2)
+                self.loss += self.dat["parameter"]["L1"] * self.B.sum(self.B.abs(self.sps[p[1]].dat["parameter"][p[2]])) \
+                             + self.dat["parameter"]["L2"] * self.B.sum(self.sps[p[1]].dat["parameter"][p[2]]**2)
         # Compute gradient.
-        self.grads = T.grad(self.loss, self.params)
+        self.grads = self.B.grad(self.loss, self.params)
         # Define updates on parameters using the specified optimizer.
         optimizer = getattr(importlib.import_module("statestream.neuronal.optimizer"), self.p.get("optimizer", "grad_desc"))
-        self.updates = optimizer(self.params, self.params_id, self.grads, self.dat)
+        self.updates = optimizer(self.params, self.params_id, self.grads, self.dat, self.B)
         # Append variables to updates.
-        self.updates.append((self.dat["variables"]["loss"], self.loss))
+        self.updates.append(self.B.update(self.dat["variables"]["loss"], self.loss))
 
         # Sanity shape check for updates.
         for u in self.updates:
             assert (len(u[0].shape.eval()) == len(u[1].shape.eval())), "Error: Inconsistant shape for plast update: " + str(u[0].shape.eval()) + " and " + str(u[1].shape.eval())                                    
         
         # Define function for sp/np parameter update (e.g. optimization).
-        self.update_parameter = theano.function([], [], updates=self.updates)
+        self.update_parameter = self.B.function([], [], updates=self.updates)
 

@@ -15,79 +15,86 @@
 # limitations under the License.
 
 
+# This is a small demonstration example on the basis of mnist dataset.
+# Here we use a strict feedforward network with three hidden layers to 
+# classify mnist digits.
+# Dataset required: 
+#     * mnist (see interfaces/process_if_mnist.py)
 
-name: test
+backend: tensorflow
+name: mnist_small
 agents: 64
 neuron_pools:
-    ret_scalar:
+    image:
         shape: [1, 28, 28]
         noise: normal
         noise_mean: 0.0
         noise_std: 0.2
         tags: [sensor]
-    label_scalar:
+    label:
         shape: [10, 1, 1]
         tags: [sensor]
-    h1_scalar:
-        shape: [32, 14, 14]
+    hidden1:
+        shape: [16, 14, 14]
         tags: [hidden]
-        device: gpu:0
-    h2_scalar:
+    hidden2:
+        shape: [32, 7, 7]
+        tags: [hidden]
+    hidden3:
         shape: [128, 1, 1]
         tags: [hidden]
-        device: gpu:0
-    pred_scalar:
+    prediction:
         shape: [10, 1, 1]
         act: softmax
         tags: [prediction]
-    alea_scalar:
-        shape: [1, 1, 1]
-        tags: [uncertainty]
 synapse_pools:
-    img_h1_scalar:
+    img_hidden1:
         source:
-        - [ret_scalar]
-        target: h1_scalar
+        - [image]
+        target: hidden1
         rf: 5
-    h1_h2_scalar:
+    hidden1_2:
         source:
-        - [h1_scalar]
-        target: h2_scalar
-    h2_pred_scalar:
+        - [hidden1]
+        target: hidden2
+        rf: 
+        - [5]
+    hidden2_3:
         source:
-        - [h2_scalar]
-        target: pred_scalar
-    sp_alea_scalar:
+        - [hidden2]
+        target: hidden3
+    hidden3_pred:
         source:
-        - [h2_scalar]
-        target: alea_scalar
+        - [hidden3]
+        target: prediction
 plasticities:
-    loss_scalar:
+    hidden_loss:
         type: loss
         loss_function: negloglikelihood
-        source: pred_scalar
-        device: gpu:0
-        aleatoric_uncertainty: alea_scalar
-        source_t: 3
-        target: label_scalar
+        source: prediction
+        source_t: 4
+        target: label
         target_t: 0
         optimizer: adam
         lr: 1e-4
         decay: 0.999
         momentum: 0.99
         parameter:
-        - [sp, img_h1_scalar, W_0_0]
-        - [sp, h1_h2_scalar, W_0_0]
-        - [sp, h2_pred_scalar, W_0_0]
-        - [sp, sp_alea_scalar, W_0_0]
-        - [np, h2_scalar, b]
+        - [sp, img_hidden1, W_0_0]
+        - [sp, hidden1_2, W_0_0]
+        - [sp, hidden2_3, W_0_0]
+        - [sp, hidden3_pred, W_0_0]
+        - [np, hidden3, b]
 interfaces:
-    mnist_scalar:
+    mnist_small:
         type: mnist
         in: [mnist_pred]
         out: [mnist_image, mnist_label]
         remap:
-            mnist_image: ret_scalar
-            mnist_label: label_scalar
-            mnist_pred: pred_scalar
+            mnist_image: image
+            mnist_label: label
+            mnist_pred: prediction
         source_file: /opt/dl/data/mnist.pkl.gz
+        fading: 0
+        min_duration: 6
+        max_duration: 6

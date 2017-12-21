@@ -19,9 +19,8 @@
 import numpy as np
 import importlib
 
-import theano
-
 from statestream.utils.helper import is_scalar_shape
+from statestream.backends.backends import import_backend
 
 
 
@@ -49,6 +48,8 @@ class Plasticity(object):
         to compute the parameter updates of this plasticity (see np above).
     """
     def __init__(self, name, net, param, mn, nps, sps):
+        # Import backend.
+        self.B = import_backend(None, None, name)
         # Get / set global specifications.
         self.name = name
         self.net = net
@@ -67,7 +68,7 @@ class Plasticity(object):
         self.params = []
         self.params_id = []
         for p in self.p["parameter"]:
-            self.params_id.append(p[0] + " " + p[1] + " " + p[2])
+            self.params_id.append(p[0] + "." + p[1] + "." + p[2])
             if p[0] == "sp":
                 try:
                     self.params.append(self.sps[p[1]].dat["parameter"][p[2]])
@@ -92,27 +93,40 @@ class Plasticity(object):
         self.dat_layout = plast_shm_layout_fct(self.name, self.net, self.param)
         self.dat = {}
         for t in ["parameter", "variables"]:
+            settable = True
             self.dat[t] = {}
             for i, i_l in self.dat_layout[t].items():
-                if i_l.type == "th":
+                if i_l.type == "backend":
                     if is_scalar_shape(i_l.shape):
-                        self.dat[t][i] = theano.shared(theano._asarray(0.0, dtype=i_l.dtype),
-                                                                    borrow=True,
-                                                                    name=name + " " + i)
+                        self.dat[t][i] = self.B.scalar(0.0, 
+                                                       dtype=np.float32, 
+                                                       name=name + "." + i,
+                                                       settable=settable)
                     else:
-                        self.dat[t][i] = theano.shared(np.zeros(i_l.shape, dtype=i_l.dtype),
-                                                                    borrow=True,
-                                                                    name=name + " " + i)
+                        self.dat[t][i] = self.B.variable(np.zeros(i_l.shape, dtype=i_l.dtype),
+                                                         borrow=True,
+                                                         name=name + "." + i,
+                                                         settable=settable)
                 elif i_l.type == "np":
                     if is_scalar_shape(i_l.shape):
                         self.dat[t][i] = np.array([1,], dtype=i_l.dtype)
                     else:
                         self.dat[t][i] = np.array(i_l.shape, dtype=i_l.dtype)
 
+        # First initialization of plasticity variables (mostly from optimizer).
+        for i, i_l in self.dat_layout["variables"].items():
+            if i_l.type == "backend":
+                value = None
+                if is_scalar_shape(i_l.shape):
+                    value = 0.0
+                else:
+                    value = np.zeros(i_l.shape, dtype=i_l.dtype)
+                self.B.set_value(self.dat[t][i], value)
+
         # Instantiate split parameter.
-        self.split = theano.shared(np.zeros([self.net['agents'],], dtype=np.float32),
-                                   borrow=True,
-                                   name=name + ' ' + 'split')
+        self.split = self.B.variable(np.zeros([self.net['agents'],], dtype=np.float32),
+                                     borrow=True,
+                                     name=name + '.' + 'split')
         # Define function for sp/np parameter update (e.g. optimization).
         self.update_parameter = lambda: None
 

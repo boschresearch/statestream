@@ -18,9 +18,7 @@
 
 from statestream.neuronal.plasticity import Plasticity
 from statestream.meta.losses import has_target
-
-import theano
-import theano.tensor as T
+from statestream.backends.backends import import_backend
 
 import importlib
 import numpy as np
@@ -42,40 +40,41 @@ class Plasticity_loss(Plasticity):
         # Initialize parent ProcessIf class.
         Plasticity.__init__(self, name, net, param, mn, nps, sps)
 
+        # Import backend.
+        self.B = import_backend(None, None, name)
         # Set source (= prediction).
         self.source = self.p["source"]
         self.target = None
         # Get ground truth and prediction.
         x = self.nps[self.p["source"]].state[self.p["source_t"]]
         y = None
-        # Import error function.
-        loss_fnc = getattr(importlib.import_module("statestream.neuronal.losses"), 
-                                                   "err_" + self.p["loss_function"])
+        # Get error function.
+        loss_fnc = "self.B." + self.p["loss_function"]
         # Compute error.
         if has_target(self.p["loss_function"]):
             # Set target (= ground truth).
             self.target = self.p["target"]
             y = self.nps[self.p["target"]].state[self.p["target_t"]]
-            error = loss_fnc(x, y)
+            error = eval(loss_fnc)(x, y)
         else:
-            error = loss_fnc(x)
+            error = eval(loss_fnc)(x)
 
         # Mask out ignored pixels.
         if "mask" in self.p:
             if y is not None:
-                mask = self.nps[self.p["mask"]].state[self.p["target_t"]][:,0,:,:].dimshuffle(0, 'x', 1, 2)
+                mask = self.B.dimshuffle(self.nps[self.p["mask"]].state[self.p["target_t"]][:,0,:,:], (0, 'x', 1, 2))
             else:
-                mask = self.nps[self.p["mask"]].state[self.p["source_t"]][:,0,:,:].dimshuffle(0, 'x', 1, 2)
+                mask = self.B.dimshuffle(self.nps[self.p["mask"]].state[self.p["source_t"]][:,0,:,:], (0, 'x', 1, 2))
             error = error * mask
 
         # Split error.
-        split = self.split.dimshuffle(0, 'x', 'x', 'x')
+        split = self.B.dimshuffle(self.split, (0, 'x', 'x', 'x'))
         error0 = error * (1 - split)
         error1 = error * split
 
         # Convert error to loss.
-        self.loss0 = T.mean(error0) * np.float32(self.net['agents']) / T.maximum(np.float32(self.net['agents']) - T.sum(self.split), 1)
-        self.loss1 = T.mean(error1) * np.float32(self.net['agents']) / (T.sum(self.split) + 1e-6)
+        self.loss0 = self.B.mean(error0) * np.float32(self.net['agents']) / self.B.maximum(np.float32(self.net['agents']) - self.B.sum(self.split), 1)
+        self.loss1 = self.B.mean(error1) * np.float32(self.net['agents']) / (self.B.sum(self.split) + 1e-6)
 
 
         #self.sample_loss1 = [T.mean(error1[i,:,:,:]) for i in range(self.net['agents'])]
@@ -100,20 +99,22 @@ class Plasticity_loss(Plasticity):
 
 
         # Define gradient.
-        self.grads = T.grad(self.loss1, self.params)
+        self.grads = self.B.grad(self.loss1, self.params)
         # Define updates on parameters.
         optimizer = getattr(importlib.import_module("statestream.neuronal.optimizer"),
                             self.p.get("optimizer", "grad_desc"))
-        self.updates = optimizer(self.params, self.params_id, self.grads, self.dat)
+        self.updates = optimizer(self.params, self.params_id, self.grads, self.dat, self.B)
         # Append variables to updates.
-        self.updates.append((self.dat["variables"]["loss0"], self.loss0))
-        self.updates.append((self.dat["variables"]["loss1"], self.loss1))
+        self.updates.append(self.B.update(self.dat["variables"]["loss0"], self.loss0))
+        self.updates.append(self.B.update(self.dat["variables"]["loss1"], self.loss1))
 
         # Sanity shape check for updates.
-        for u in self.updates:
-            if len(u[0].shape.eval()) != len(u[1].shape.eval()):
-                print("Error: inconsistant shape for plast update: " + str(u[0].shape.eval()) + " and " + str(u[1].shape.eval()))                                 
+        if False:
+            for u in self.updates:
+                shape_0 = self.B.shape(u[0])
+                shape_1 = self.B.shape(u[1])
+                print("Shape for plast " + self.name + " update " + str(u[0].name) + " : " + str(shape_0) + " and " + str(shape_1))                                 
         
         # Define function for sp/np parameter update (e.g. optimization).
-        self.update_parameter = theano.function([], [], updates=self.updates)
+        self.update_parameter = self.B.function([], [], updates=self.updates)
 

@@ -20,6 +20,7 @@ import numpy as np
 import importlib
 
 from statestream.neuronal.plasticity import Plasticity
+from statestream.backends.backends import import_backend
 
 
 
@@ -33,9 +34,8 @@ class Plasticity_hebbian(Plasticity):
     def __init__(self, name, net, param, mn, nps, sps):
         # Initialize parent Plasticity class.
         Plasticity.__init__(self, name, net, param, mn, nps, sps)
-        # Import theano.
-        import theano
-        import theano.tensor as T
+        # Import backend.
+        self.B = import_backend(None, None, name)
 
         # For hebbian we need only:
         #    one parameter of a SP
@@ -76,10 +76,10 @@ class Plasticity_hebbian(Plasticity):
             # TODO: May be accomplished much nicer using the SCAN function.
             single_grads = []
             for a in range(self.net["agents"]):
-                single_grads.append(T.dot(target[a,:,0,0], self.dat["variables"]["source(now-1)"][a,:,0,0]))
-            grads = T.concatenate(single_grads)
+                single_grads.append(self.B.dot(target[a,:,0,0], self.dat["variables"]["source(now-1)"][a,:,0,0]))
+            grads = self.B.concatenate(single_grads)
         else:
-            grads = T.tensordot(target[:,:,0,0], 
+            grads = self.B.tensordot(target[:,:,0,0], 
                                 self.dat["variables"]["source(now-1)"], 
                                 axes=[[0], [0]])
 
@@ -96,25 +96,20 @@ class Plasticity_hebbian(Plasticity):
         self.updates = optimizer(self.params, 
                                  self.params_id,
                                  self.grads, 
-                                 self.dat)
+                                 self.dat,
+                                 self.B)
 
         # Time shift of source activation is also needed for hebbian plasts.
-        self.updates.append((self.dat["variables"]["source(now-1)"], 
-                             self.dat["variables"]["source(now)"]))
-        self.updates.append((self.dat["variables"]["source(now)"], 
-                             self.nps[self.p["source"]].state[0]))
-        self.updates.append((self.dat["variables"]["target(now-1)"], 
-                             self.dat["variables"]["target(now)"]))
-        self.updates.append((self.dat["variables"]["target(now)"], 
-                             self.nps[self.p["target"]].state[0]))
-
-        # Sanity shape check for updates.
-        for u in self.updates:
-            if len(u[0].shape.eval()) != len(u[1].shape.eval()):
-                print("Error: inconsistant shape for plast update: " \
-                      + str(u[0].shape.eval()) + " and " + str(u[1].shape.eval()))
+        self.updates.append(self.B.update(self.dat["variables"]["source(now-1)"], 
+                                          self.dat["variables"]["source(now)"]))
+        self.updates.append(self.B.update(self.dat["variables"]["source(now)"], 
+                                          self.nps[self.p["source"]].state[0]))
+        self.updates.append(self.B.update(self.dat["variables"]["target(now-1)"], 
+                                          self.dat["variables"]["target(now)"]))
+        self.updates.append(self.B.update(self.dat["variables"]["target(now)"], 
+                                          self.nps[self.p["target"]].state[0]))
 
         # Define function for sp/np parameter update (e.g. optimization).
-        self.update_parameter = theano.function([], [], updates=self.updates)
+        self.update_parameter = self.B.function([], [], updates=self.updates)
 
         

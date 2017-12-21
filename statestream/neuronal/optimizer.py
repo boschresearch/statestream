@@ -16,15 +16,13 @@
 
 
 
-import theano.tensor as T
-
 
 
 # =============================================================================
 # =============================================================================
 # =============================================================================
 
-def grad_desc(params, params_id, grads, dat):
+def grad_desc(params, params_id, grads, dat, B):
     """Standard (stochastic) gradient descent with fixed stepwidth lr.
 
     # Parameters:
@@ -50,11 +48,10 @@ def grad_desc(params, params_id, grads, dat):
     """
     updates = []
     for param_i, grad_i, p_id in zip(params, grads, params_id):
-        updates.append((param_i, (- dat["parameter"]["lr"] \
-                                    * grad_i).clip(-1.0, 1.0)))
+        updates.append(B.update(param_i, B.clip(-dat["parameter"]["lr"] * grad_i, -1.0, 1.0)))
     # Update gradients to variables.
     for p in range(len(params)):
-        updates.append((dat["variables"]["grad " + params_id[p]], grads[p]))
+        updates.append(B.update(dat["variables"]["grad." + params_id[p]], grads[p]))
     return updates
 
 
@@ -66,7 +63,7 @@ def grad_desc(params, params_id, grads, dat):
 
 
 # params_id = "np/sp name par" for all params (or grads)
-def adam(params, params_id, grads, dat):
+def adam(params, params_id, grads, dat, B):
     """The Adam optimizer.
     
     # Parameters:
@@ -99,30 +96,30 @@ def adam(params, params_id, grads, dat):
     updates = []
     # Update time and add it to updates.
     t = dat["variables"]["t"] + 1
-    updates.append((dat["variables"]["t"], t))
+    updates.append(B.update(dat["variables"]["t"], t))
     # Collect moments and variances in lists.
     _moments = []
     _varianc = []
     for p in range(len(params)):
-        _moments.append(dat["variables"]["moments " + params_id[p]])
-        _varianc.append(dat["variables"]["varianc " + params_id[p]])
+        _moments.append(dat["variables"]["moments." + params_id[p]])
+        _varianc.append(dat["variables"]["varianc." + params_id[p]])
     # Update moments.
     for grad_i, mom_i in zip(grads, _moments):
-        updates.append((mom_i, dat["parameter"]["momentum"] * mom_i + \
-                               (1 - dat["parameter"]["momentum"]) * grad_i))
+        updates.append(B.update(mom_i, dat["parameter"]["momentum"] * mom_i + \
+                                (1 - dat["parameter"]["momentum"]) * grad_i))
     # Compute updates for variances.
     for grad_i, var_i in zip(grads, _varianc):
-        updates.append((var_i, dat["parameter"]["decay"] * var_i + \
-                               (1 - dat["parameter"]["decay"]) * grad_i**2))
+        updates.append(B.update(var_i, dat["parameter"]["decay"] * var_i + \
+                                (1 - dat["parameter"]["decay"]) * grad_i**2))
     # Compute parameter updates.
     for p_i, grad_i, mom_i, var_i in zip(params, grads, _moments, _varianc):
-        updates.append((p_i, -(dat["parameter"]["lr"] \
-                                * T.sqrt(1 - dat["parameter"]["decay"]**t) \
+        updates.append(B.update(p_i, -(dat["parameter"]["lr"] \
+                                * B.sqrt(1 - dat["parameter"]["decay"]**t) \
                                 / (1 - dat["parameter"]["momentum"]**t)) \
-                                * (mom_i / (T.sqrt(var_i) + 1e-6))))
+                                * (mom_i / (B.sqrt(var_i) + 1e-6))))
     # Update gradients to variables.
     for p in range(len(params)):
-        updates.append((dat["variables"]["grad " + params_id[p]], grads[p]))
+        updates.append(B.update(dat["variables"]["grad." + params_id[p]], grads[p]))
     # Finally return updates.
     return updates
 
@@ -135,7 +132,7 @@ def adam(params, params_id, grads, dat):
 
 
 # params_id = "np/sp name par" for all params (or grads)
-def rmsprop(params, params_id, grads, dat):
+def rmsprop(params, params_id, grads, dat, B):
     """The RMSprop optimizer.
     
     # Parameters:
@@ -168,22 +165,22 @@ def rmsprop(params, params_id, grads, dat):
     updates = []
     # Update time and add it to updates.
     t = dat["variables"]["t"] + 1
-    updates.append((dat["variables"]["t"], t))
+    updates.append(B.update(dat["variables"]["t"], t))
     # Collect accumulations in lists.
     _accumulations = []
     for p in range(len(params)):
-        _accumulations.append(dat["variables"]["accumulation " + params_id[p]])
+        _accumulations.append(dat["variables"]["accumulation." + params_id[p]])
     # Update accumulations.
     for p_i, grad_i, acc_i in zip(params, grads, _accumulations):
         next_acc = dat["parameter"]["rho"] * acc_i \
                    + (1 - dat["parameter"]["rho"]) * grad_i**2
-        updates.append((acc_i, next_acc))
-        updates.append((p_i, - dat["parameter"]["lr"] * grad_i \
-                            / (T.sqrt(next_acc) + 1e-7)))
+        updates.append(B.update(acc_i, next_acc))
+        updates.append(B.update(p_i, - dat["parameter"]["lr"] * grad_i \
+                            /   (B.sqrt(next_acc) + 1e-7)))
 
     # Update gradients to variables.
     for p in range(len(params)):
-        updates.append((dat["variables"]["grad " + params_id[p]], grads[p]))
+        updates.append(B.update(dat["variables"]["grad." + params_id[p]], grads[p]))
     # Finally return updates.
     return updates
 
