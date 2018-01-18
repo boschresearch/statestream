@@ -70,7 +70,7 @@ def import_backend(net, param, item_name):
                 os.makedirs(base_compiledir)
             # Set device.
             loc_device = "cpu"
-            tmp = os.environ["CUDA_VISIBLE_DEVICES"]
+            tmp = os.environ.get("CUDA_VISIBLE_DEVICES", "")
             if dev_type == "gpu":
                 loc_device = "cuda0"
                 os.environ["CUDA_VISIBLE_DEVICES"] = str(visible_devices[dev_id])

@@ -104,12 +104,12 @@ class NeuronPool(object):
         self.dropout = self.p.get("dropout", None)
         if self.dropout is not None:
             # Random stream for dropout.
-            self.dropout_srng = self.B.randomstream(np.random.RandomState(42).randint(999999), "binomial")
+            self.dropout_srng = self.B.randomstream(np.random.RandomState(42).randint(99999), "binomial")
         # Get np zoneout.
         self.zoneout = self.p.get("zoneout", None)
         if self.zoneout is not None:
             # Random stream for zoneout.
-            self.zoneout_srng = self.B.randomstream(np.random.RandomState(42).randint(999999), "binomial")
+            self.zoneout_srng = self.B.randomstream(np.random.RandomState(42).randint(99999), "binomial")
         # Get / set batch-norm specified or default parameter.
         self.batchnorm_mean = self.p.get("batchnorm_mean", False)
         self.batchnorm_std = self.p.get("batchnorm_std", False)
@@ -352,9 +352,7 @@ class NeuronPool(object):
                 # Apply dropout.
                 if self.dropout is not None:
                     # Get mask for dropout.
-                    mask = self.dropout_srng(n=1, 
-                                             p=1 - self.dat["parameter"]["dropout"],
-                                             size=self.shape)
+                    mask = self.dropout_srng(self.shape, 1, 1 - self.dat["parameter"]["dropout"])
                     
                     self.state_SPA[-1] = self.state_SPA[-1] * self.B.cast(mask, self.B._DTYPE)
 

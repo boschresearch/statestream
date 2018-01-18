@@ -171,13 +171,13 @@ class RandomStream(object):
         self.dtype = tf.as_dtype(dtype)
         self.seed = seed
         self.dist_type = dist_type
-    def __call__(self, shape):
+    def __call__(self, shape=(), p=0.5, low=0.0, high=1.0, avg=0.0, std=1.0):
         if self.dist_type == "normal":
-            return tf.random_normal(shape, seed=self.seed)
+            return tf.random_normal(shape, mean=avg, stddev=std, seed=self.seed)
         elif self.dist_type == "uniform":
-            return tf.random_uniform(shape, seed=self.seed)
+            return tf.random_uniform(shape, minval=low, maxval=high, seed=self.seed)
         elif self.dist_type == "binomial":
-            return tf.where(tf.random_uniform(shape, dtype=self.dtype, seed=self.seed) <= 0.0,
+            return tf.where(tf.random_uniform(shape, dtype=self.dtype, seed=self.seed) <= p,
                             tf.ones(shape, dtype=self.dtype),
                             tf.zeros(shape, dtype=self.dtype))
 
