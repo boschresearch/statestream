@@ -30,14 +30,18 @@ import matplotlib
 from statestream.utils.pygame_import import pg, pggfx
 from statestream.utils.yaml_wrapper import load_yaml, dump_yaml
 
-from statestream.meta.network import suggest_data, shortest_path, MetaNetwork
+from statestream.meta.network import suggest_data, \
+                                     shortest_path, \
+                                     MetaNetwork, \
+                                     S2L
 from statestream.meta.synapse_pool import sp_get_dict
-from statestream.meta.network import S2L
 
-from statestream.ccpp.cgraphics import cgraphics_colorcode, cgraphics_np_force
+from statestream.ccpp.cgraphics import cgraphics_colorcode, \
+                                       cgraphics_np_force, \
+                                       cgraphics_vec_to_RGBangle
 
-from statestream.utils.rearrange import rearrange_3D_to_2D
-from statestream.utils.rearrange import rearrange_4D_to_2D
+from statestream.utils.rearrange import rearrange_3D_to_2D, \
+                                        rearrange_4D_to_2D
 
 from statestream.utils.helper import is_scalar_shape
 from statestream.utils.helper import is_int_dtype
@@ -609,6 +613,10 @@ class Visualization(object):
                 if len(l_shape) == 3:
                     if l_shape[0] in [2,3]:
                         modes.append('scatter')
+                if len(l_shape) == 3 and l_shape[0] == 2:
+                    modes.append('angle2D')
+                if len(l_shape) == 4 and l_shape[1] == 2:
+                    modes.append('angle2D')
                 if l_shape[0] == 3:
                     modes.append('RGB 0')
                 if len(l_shape) > 1:
@@ -729,7 +737,7 @@ class Visualization(object):
                 SW['mode'] = copy.copy(mode)
 
         # Set colormap flag.
-        if SW['mode'] in ['maps'] \
+        if SW['mode'] in ['maps', 'angle2D'] \
                 or SW['mode'].startswith('plot'):
             SW['cm flag'] = True
 
@@ -774,6 +782,16 @@ class Visualization(object):
                     SW['sub shape'] = dat_shape[0:2]
                 SW['shape'] = [SW['sub shape'][0] * dat_shape[2],
                                SW['sub shape'][1] * dat_shape[3]]
+        elif SW['mode'] == 'angle2D':
+            if len(dat_shape) == 3:
+                SW['shape'] = dat_shape[1:]
+            elif len(dat_shape) == 4:
+                SW['tileable'] = True
+                SW['sub shape'][0] = int(np.ceil(np.sqrt(dat_shape[0])))
+                SW['sub shape'][1] \
+                    = int(np.ceil(float(dat_shape[0]) / SW['sub shape'][0]))
+                SW['shape'] = [SW['sub shape'][0] * dat_shape[2],
+                               SW['sub shape'][1] * dat_shape[3]]
         elif SW['mode'].startswith('RGB'):
             if int(SW['mode'].split()[1]) == 0:
                 if len(dat_shape) == 2:
@@ -801,7 +819,7 @@ class Visualization(object):
                                    SW['sub shape'][1] * dat_shape[3]]
 
         # Create some sub-window internal visualization structures.
-        if SW['mode'] == 'maps' or SW['mode'].startswith('RGB'):
+        if SW['mode'] in ['maps', 'angle2D'] or SW['mode'].startswith('RGB'):
             SW['buffer'] = pg.Surface(SW['shape'])
             SW['buffer'].convert()
             SW['array'] = np.zeros(SW['shape'], dtype=np.int32)
@@ -1726,7 +1744,8 @@ class Visualization(object):
         self.CM_RAW = {}
         self.CM_CC = {}
         for cms in self.cm:
-            colormap = np.array(matplotlib.pyplot.get_cmap(cms)(np.arange(256) / 255))
+            colormap = np.array(matplotlib.pyplot.get_cmap(cms)(np.arange(256) / 256))
+            colormap = np.clip(colormap, 0.0, 0.999)
             self.CM_CC[cms] = np.copy(colormap)
             self.CM_CC[cms][:,0] = colormap[:,2] * 255
             self.CM_CC[cms][:,1] = colormap[:,1] * 255
@@ -4277,6 +4296,21 @@ class Visualization(object):
                     SW['array'][:,:] = SW['array'][:,:] + 256 * (SW['array double'] * 255).astype(np.int32)
                     rearrange_3D_to_2D(dat_B, SW['array double'], SW['shape'], SW['sub shape'])
                     SW['array'][:,:] = SW['array'][:,:] + 256 * 256 * (SW['array double'] * 127).astype(np.int32)
+            # Plot a color coded 2D angle (e.g. for optic-flow).
+            elif SW['mode'] == 'angle2D':
+                self.tmp_surf.fill(0)
+                if len(shape) == 3:
+                    # Assume dat of shape [2, dim_x, dim_y].
+                    img = dat.flatten()[:]
+                    cgraphics_vec_to_RGBangle(img, SW['shape'][0], SW['shape'][1], self.CM[SW['colormap']], int(self.ccol))
+                    SW['array'] = np.reshape(img[0:SW['shape'][0] * SW['shape'][1]], [SW['shape'][0], SW['shape'][1]]).astype(np.int32)
+                elif len(shape) == 4:
+                    array_y = np.copy(SW['array double'])
+                    rearrange_3D_to_2D(dat[:,0,:,:], SW['array double'], SW['shape'], SW['sub shape'])
+                    rearrange_3D_to_2D(dat[:,1,:,:], array_y, SW['shape'], SW['sub shape'])
+                    img = np.stack([SW['array double'], array_y]).flatten()[:]
+                    cgraphics_vec_to_RGBangle(img, SW['shape'][0], SW['shape'][1], self.CM[SW['colormap']], int(self.ccol))
+                    SW['array'] = np.reshape(img[0:SW['shape'][0] * SW['shape'][1]], [SW['shape'][0], SW['shape'][1]]).astype(np.int32)
             # Histogram plot for everything.
             elif SW['mode'] == 'hist':
                 self.tmp_surf.fill(0)
@@ -4382,7 +4416,7 @@ class Visualization(object):
                                  area=[0, 0, SW['size'][0], SW['size'][1]])
 
             # Now blit scaled SW['array'] to screen.
-            if SW['mode'] == 'maps' or SW['mode'].startswith('RGB'):
+            if SW['mode'] in ['maps', 'angle2D'] or SW['mode'].startswith('RGB'):
                 try:
                     pg.surfarray.blit_array(SW['buffer'],
                                             SW['array'])
@@ -4500,7 +4534,7 @@ class Visualization(object):
 
             # Draw subwindow grid / tiles.
             if SW['tileable'] and SW['tiles']:
-                if SW['mode'] == 'maps' or SW['mode'].startswith('RGB'):
+                if SW['mode'] in ['maps', 'angle2D'] or SW['mode'].startswith('RGB'):
                     # Only if all sub-divisions are shown.
                     if SW['map'] == -1:
                         # Draw horizontal lines.

@@ -24,6 +24,12 @@ limitations under the License.
 
 
 
+#if !defined(M_PI)
+    #define M_PI acos(-1.0)
+#endif
+
+
+
 void cgraphics_colorcode(double* dat,
                          int w,
                          int h,
@@ -65,6 +71,71 @@ void cgraphics_colorcode(double* dat,
                 *c = (double)((int)(256 * b[i]) + 256 * (int)(256 * g[i]) + EE * (int)(256 * r[i]));
         }
     }
+}
+
+
+
+
+
+void cgraphics_vec_to_RGBangle(double* dat,
+                               int w,
+                               int h,
+                               float* r,
+                               float* g,
+                               float* b,
+                               int colorcorrect)
+{
+    // counter
+    double* c_x;
+    double* c_y;
+    long int EE = 256 * 256;
+    long int L = (long int)w * (long int)h;
+    long int l;
+    // local vector amplitude and angle
+    double amplitude;
+    double angle;
+    double max_amplitude=0.0;
+    double min_amplitude=1e+4;
+    int i;
+    double f;
+
+    // compute amplitudes and angles
+    for (c_x = dat, c_y = dat + L, l = 0; l < L; ++c_x, ++c_y, ++l)
+    {
+        amplitude = sqrt(*c_x * *c_x + *c_y * *c_y);
+        if (amplitude < 1e-6)
+            angle = 0.0;
+        else
+            // atan2 implementation
+            if (*c_x > 0.0)
+                angle = 2.0 * atan(*c_y / (amplitude + *c_x));
+            else if (fabs(*c_y) < 1e-6)
+                angle = M_PI;
+            else
+                angle = 2.0 * atan((amplitude - *c_x) / *c_y);
+        if (amplitude > max_amplitude)
+            max_amplitude = amplitude;
+        if (amplitude < min_amplitude)
+            min_amplitude = amplitude;
+        *c_x = amplitude;
+        *c_y = angle;
+    }
+
+    // compute normalized color values
+    if (max_amplitude - min_amplitude < 1e-6)
+        for (c_x = dat, l = 0; l < L; ++c_x, ++l)
+            *c_x = 0.0;
+    else
+        for (c_x = dat, c_y = dat + L, l = 0; l < L; ++c_x, ++c_y, ++l)
+        {
+            i = (int)(255.0 * (*c_y + M_PI) / (2 * M_PI));
+            f = (*c_x - min_amplitude) / (max_amplitude - min_amplitude);
+            // color correction
+            if (colorcorrect == 1)
+                *c_x = (double)((int)(256 * (f * r[i] + (1 - f))) + 256 * (int)(256 * (f * g[i] + (1 - f))) + EE * (int)(256 * (f * b[i] + (1 - f)) * 0.5));
+            else
+                *c_x = (double)((int)(256 * (f * b[i] + (1 - f))) + 256 * (int)(256 * (f * g[i] + (1 - f))) + EE * (int)(256 * (f * r[i] + (1 - f))));
+        }
 }
 
 

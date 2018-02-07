@@ -39,6 +39,14 @@ libcd.cgraphics_colorcode.argtypes = [array_1d_double,
                                       array_1d_float, 
                                       array_1d_float,
                                       c_int]
+libcd.cgraphics_vec_to_RGBangle.restype = None
+libcd.cgraphics_vec_to_RGBangle.argtypes = [array_1d_double,
+                                      c_int, 
+                                      c_int, 
+                                      array_1d_float,
+                                      array_1d_float, 
+                                      array_1d_float,
+                                      c_int]
 libcd.cgraphics_np_force.restype = None
 libcd.cgraphics_np_force.argtypes = [array_1d_double,
                                      array_1d_double,
@@ -93,6 +101,38 @@ def cgraphics_colorcode(source, w, h, cm, colorcorrect):
                                      np.float32(cm[:,1]),
                                      np.float32(cm[:,2]),
                                      colorcorrect)
+
+def cgraphics_vec_to_RGBangle(source, w, h, cm, colorcorrect):
+    """Pixelwise conversion of a 2D vectors to RGB angular image.
+
+    This is especially useful for optic-flow visualization.
+
+    Parameter
+    ---------
+    source : numpy array [2 * dim_x * dim_y]
+        The 2D vector image of resolution dim_x x dim_y.
+    w, h : int
+        Width and height of the 2D vector image.
+    cm : [255,3] shaped int8 array
+        A RGB colormap.
+    colorcorrect : bool
+        Color correction flag.
+
+    Return
+    ------
+    The color-coded angle / amplitude is stored in the first dimension of
+    the source.
+
+    """
+    return libcd.cgraphics_vec_to_RGBangle(np.double(source),
+                                           w,
+                                           h, 
+                                           np.float32(cm[:,0]),
+                                           np.float32(cm[:,1]),
+                                           np.float32(cm[:,2]),
+                                           colorcorrect)
+
+
 
 def cgraphics_np_force(item_pos_X, 
                        item_pos_Y, 

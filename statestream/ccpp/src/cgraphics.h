@@ -32,6 +32,19 @@ void cgraphics_colorcode(double* source,
 
 
 /*
+ * Converts the source 2D image into an angular RGB image.
+ */
+void cgraphics_vec_to_RGBangle(double* source,
+                               int w,
+                               int h,
+                               float* r,
+                               float* g,
+                               float* b,
+                               int colorcorrect);
+
+
+
+/*
  * Compute forces between neuron-pools.
  */
 void cgraphics_np_force(double* item_pos_X,
