@@ -64,6 +64,7 @@ _FUNCTIONS = ["variable",
 			  "tanh",
 			  "relu",
 			  "selu",
+              "spiky",
 			  "leakyrelu",
 			  "softmax",
 			  "softplus",
@@ -245,6 +246,21 @@ def selu(x, llambda=1.0507, alpha=1.6733):
     fixed-point of layer statistics (mu = 0, sigma = 1).
     """
     return T.switch(T.lt(x,0), alpha * llambda * (T.exp(x) - 1.0), llambda * x)
+
+def spiky(x, threshold=1.0, saturation=2.0):
+    """Spiky function.
+
+    Simple spiking activation function assuming a self identity recurrence.
+    x < 0:                          0
+    0 < x < threshold:              x
+    threshold < x < saturation:     x + saturation
+    saturation <= x:                0
+
+
+    """
+    _x = T.switch(T.lt(x,0), 0.0 * x, x)
+    _y = T.switch(T.gt(_x,saturation), 0.0 * _x, _x)
+    return T.switch(T.gt(_y, threshold), _y + saturation, _y)
 
 def leakyrelu(x, leak=0.1):
     """Leaky ReLU function: a(x) = max(x, leak*x)
