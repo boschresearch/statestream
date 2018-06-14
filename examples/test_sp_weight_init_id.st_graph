@@ -1,0 +1,57 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# An example to test / illustrate some weight initializations.
+# Dataset required: 
+#     None
+
+
+name: test_sp_weight_init
+agents: 8
+backend: tensorflow
+neuron_pools:
+    np0:
+        shape: [4, 1, 1]
+        noise: normal
+        noise_std: 0.1
+    np1:
+        shape: [4, 1, 1]
+    np2:
+        shape: [12, 1, 1]
+    np3:
+        shape: [12, 1, 1]
+synapse_pools:
+    sp_01:
+        source: 
+        - [np0]
+        target: np1
+        rf: [[1]]
+        init W_0_0: id
+    sp_02:
+        source: 
+        - [np0]
+        target: np2
+        rf: [[1]]
+        init W_0_0: id
+    sp_03:
+        source: 
+        - [np0]
+        target: np3
+        rf: [[1]]
+        init W_0_0: Id
+plasticities: {}
+interfaces: {}

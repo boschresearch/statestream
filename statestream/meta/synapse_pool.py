@@ -395,17 +395,28 @@ def sp_init(net, name, dat_name, dat_layout, mode=None):
                                                                        high=W_bound,
                                                                        size=dat_layout.shape), 
                                      dtype=dat_layout.dtype)
-                elif init_as == "id":
+                elif init_as in ["id", "Id"]:
                     dat_value = np.zeros(dat_layout.shape, dtype=dat_layout.dtype)
-                    # Assert source features equal target features.
-                    assert (dat_layout.shape[0] == dat_layout.shape[1]), \
-                        "ERROR during init of sp " + str(name) \
-                        + ": init as id requires same source and target features."
-                    # Loop over all target features.
-                    for f in range(dat_layout.shape[0]):
-                        dat_value[f, f, dat_layout.shape[2] // 2, dat_layout.shape[3] // 2] \
-                            = 1.0
-                elif init_as.startswith("id_"):
+                    # Simple identity for source features equal target features.
+                    if dat_layout.shape[0] == dat_layout.shape[1]:
+                        # Loop over all target features.
+                        for f in range(dat_layout.shape[0]):
+                            dat_value[f, f, dat_layout.shape[2] // 2, dat_layout.shape[3] // 2] \
+                                = 1.0
+                    # In case target target dim is multiple of source dim.
+                    elif dat_layout.shape[0] > dat_layout.shape[1] and dat_layout.shape[0] % dat_layout.shape[1] == 0:
+                        _factor = dat_layout.shape[0] // dat_layout.shape[1]
+                        eye = np.eye(dat_layout.shape[1])
+                        one = np.ones([_factor,1])
+                        if init_as == "id":
+                            kron = np.kron(eye, one)
+                        else:
+                            kron = np.kron(one, eye)
+                        for f_tgt in range(dat_layout.shape[0]):
+                            for f_src in range(dat_layout.shape[1]):
+                                dat_value[f_tgt, f_src, dat_layout.shape[2] // 2, dat_layout.shape[3] // 2] \
+                                    = kron[f_tgt, f_src]
+                elif init_as.startswith("id_") or init_as.startswith("Id_"):
                     # Determine parameter.
                     try:
                         x_par = float(init_as.split("_")[1])
@@ -420,7 +431,7 @@ def sp_init(net, name, dat_name, dat_layout, mode=None):
                     for f in range(dat_layout.shape[0]):
                         dat_value[f, f, dat_layout.shape[2] // 2, dat_layout.shape[3] // 2] \
                             = x_par
-                elif init_as == "-id":
+                elif init_as in ["-id", "-Id"]:
                     dat_value = np.zeros(dat_layout.shape, dtype=dat_layout.dtype)
                     # Assert source features equal target features.
                     assert (dat_layout.shape[0] == dat_layout.shape[1]), \

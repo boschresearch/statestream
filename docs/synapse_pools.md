@@ -72,7 +72,7 @@ By default, all weight parameters are initialized with Xavier initialization [[X
 
 * **xavier**: All weights are drawn independently between [-bound, bound] where bound = sqrt(6 / (fan_in + fan_out)).
 * **xavier_float**: Same as **xavier**, but **float** will be used as a factor for the boundaries of the uniform distribution (e.g. **xavier_4.0**).
-* **id**: Initialize the parameters so that the matrix multiplication will be the identity. This requires the number of source features equals the number of target features.
+* **id**, **Id**: Initialize the parameters so that the matrix multiplication will be the identity. This requires that the number of source features equals the number of target features. In case the number of target features is a multiple of the number of source features, the Kronecker-product of **eye** and **ones** will be used, **id** for kron(eye, one) and **Id** for kron(one,eye) (please see also [examples/test_sp_weight_init_id.st_graph](../examples/test_sp_weight_init_id.st_graph). 
 * **-id**: Same as **id** but with opposite sign.
 * **bilin**: Bilinear interpolation, which are for example used for upsampling.
 * **normal**: All weight parameters are independently drawn from the standard normal distribution.
