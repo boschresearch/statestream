@@ -410,6 +410,21 @@ class MetaNetwork(object):
                                                             self.net["synapse_pools"][sp_name][i][-1].append(I[li][lii])
                                                 else:
                                                     self.net["synapse_pools"][sp_name][i].append(I[li])
+                                        elif isinstance(I, dict) and i == "share params":
+                                            self.net["synapse_pools"][sp_name][i] = {}
+                                            for li in I:
+                                                if isinstance(I[li], list):
+                                                    self.net["synapse_pools"][sp_name][i][li] = []
+                                                    for lii in range(len(I[li])):
+                                                        if isinstance(I[li][lii], str):
+                                                            if I[li][lii].startswith("_"):
+                                                                self.net["synapse_pools"][sp_name][i][li].append(MI[I[li][lii][1:]])
+                                                            else:
+                                                                if I[li][lii] in MT["synapse_pools"]:
+                                                                    src_sp_name = mi + "_" + I[li][lii]
+                                                                    self.net["synapse_pools"][sp_name][i][li].append(src_sp_name)
+                                                                else:
+                                                                    self.net["synapse_pools"][sp_name][i][li].append(I[li][lii])
                                         else:
                                             self.net["synapse_pools"][sp_name][i] = I
 
@@ -648,7 +663,7 @@ class MetaNetwork(object):
                     for source_np in [item for sub_list in sources for item in sub_list]:
                         if source_np not in self.net_np_nps[n]:
                             self.net_np_nps[n].append(source_np)
-        
+
         # Compute nets for plasts.
         self.net_plast_nps = {}
         self.net_plast_sps = {}
