@@ -13,6 +13,7 @@ There exist several ways to import parts from network specification:
 * import a single module: The specification **- [spec_file, modules.module]** will import the module **module** from **spec_file.st_graph**.
 * import tag specifications: This works the same as for the module specification. All tag specifications or a specific tag specification can be imported.
 * import all items of a specific tag: The specification **- [spec_file, tag]** will import all items (all nps, sps, plasts, ifs) from **spec_file.st_graph** with the tag **tag**.
+* import all or specific global variable(s): The specification **- [spec_file, globals]** will import all global variables from **spec_file.st_graph**. The specification **- [spec_file, globals.MYGLOB]** will import only the **MYGLOB** global variable from **spec_file.st_graph**.
 
 An example import illustration with some possible specification:
 

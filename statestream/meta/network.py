@@ -284,6 +284,22 @@ class MetaNetwork(object):
                                     for p,P in I.items():
                                         if p not in self.net[mods[0]][i]:
                                             self.net[mods[0]][i][p] = copy.copy(P)
+                    elif E.startswith("globals"):
+                        # Import all or specified global variable(s).
+                        if "globals" in loc_net:
+                            if E == "globals":
+                                # Import all global variables.
+                                if not "globals" in self.net:
+                                    self.net["globals"] = {}
+                                for i,I in loc_net["globals"].items():
+                                    self.net["globals"][i] = copy.copy(I)
+                            elif E.startswith("globals."):
+                                # Import specific global variable.
+                                if not "globals" in self.net:
+                                    self.net["globals"] = {}
+                                mods = E.split(".")
+                                if mods[1] in loc_net["globals"]:
+                                    self.net["globals"][mods[1]] = copy.copy(loc_net["globals"][mods[1]])
                     else:
                         # Assume that a tag is given and import all items with this tag.
                         for t in ["neuron_pools", "synapse_pools", "plasticities", "interfaces"]:
