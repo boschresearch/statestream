@@ -65,6 +65,7 @@ _FUNCTIONS = ["variable",
 			  "relu",
 			  "selu",
               "spiky",
+              "switchsign",
 			  "leakyrelu",
 			  "softmax",
 			  "softplus",
@@ -253,14 +254,21 @@ def spiky(x, threshold=1.0, saturation=2.0):
     Simple spiking activation function assuming a self identity recurrence.
     x < 0:                          0
     0 < x < threshold:              x
-    threshold < x < saturation:     x + saturation
+    threshold < x < saturation:     saturation + eps
     saturation <= x:                0
 
 
     """
     _x = T.switch(T.lt(x,0), 0.0 * x, x)
     _y = T.switch(T.gt(_x,saturation), 0.0 * _x, _x)
-    return T.switch(T.gt(_y, threshold), _y + saturation, _y)
+    return T.switch(T.gt(_y, threshold), 0.0 * _y + saturation + 1e-8, _y)
+
+def switchsign(x, threshold=1.0):
+    """Switch sign function.
+
+    All activations above the threshold switch their sign.
+    """
+    return T.switch(T.gt(x, threshold), -x, x)
 
 def leakyrelu(x, leak=0.1):
     """Leaky ReLU function: a(x) = max(x, leak*x)
