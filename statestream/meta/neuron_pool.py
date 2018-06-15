@@ -79,8 +79,26 @@ def np_init(net, name, dat_name, dat_layout, mode=None):
     dat_value : np.array
         The numpy array with the same layout as in dat_layout but initialized according to mode.
     """
+    # Get local dictionary.
+    p = net["neuron_pools"][name]
     # Default return is None.
     dat_value = None
+    if mode is None:
+        # Try as specified, otherwise use default.
+        init_as = p.get("init " + dat_name, None)
+        if init_as is None:
+            init_as = dat_layout.default
+    else:
+        init_as = mode
+    # Dependent on init_as initialize.
+    if dat_name[0] in ["b", "g"]:
+        if isinstance(init_as, str):
+            if init_as == "normal":
+                dat_value = np.random.normal(loc=0.0, 
+                                             scale=1.0, 
+                                             size=dat_layout.shape).astype(dat_layout.dtype)
+        else:
+            dat_value = (float(init_as) * np.ones(dat_layout.shape, dtype=dat_layout.dtype)).astype(dat_layout.dtype)
 
     # Return initialized value.
     return dat_value

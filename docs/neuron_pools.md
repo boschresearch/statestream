@@ -50,4 +50,13 @@ Specification parameters
 	* False: no mean subtraction is performed for layer normalization (default)
 * **layernorm_std** (type: str): Same as **layernorm_mean**, now for the normalization with the standard deviation. Available settings and default are the same.
 
+
+
+Provided parameter initializations
+----------------------------------
+
+By default, all parameters (bias **b** and gain **g**) are initialized as neutral (**b = 0**) or non existent (by default **g** is none and will be ignored). Parameters can be set to a float value using the **init** specification (e.g. **init b: -2**). 
+
+
+
 Please see also the examples folder for more details.
