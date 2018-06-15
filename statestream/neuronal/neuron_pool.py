@@ -179,7 +179,7 @@ class NeuronPool(object):
                 elif self.noise == "uniform":
                     self.state_SUM[-1] += (self.dat["parameter"]["noise_max"] - self.dat["parameter"]["noise_min"]) \
                                           * self.noise_dist(self.shape) \
-                                          - self.dat["parameter"]["noise_min"]
+                                          + self.dat["parameter"]["noise_min"]
 
                 # Apply batch normalization for mean.
                 if self.batchnorm_mean:
