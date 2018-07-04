@@ -159,7 +159,20 @@ The demonstration example does not make use of GPU acceleration, but in order to
 Demonstration example
 ---------------------
 
-A demonstration [example](examples/demo.st_graph) is provided with this repository for which neither an external dataset nor GPU support is required. It consists of a simple 4 layer network for classification of the first 10 roman numerals: I, II, III, IV, V, VI, VII, VIII, IX, X. Dependent on the monitor settings on the system, one may want to adapt the _screen_width_ and _screen_height_ setting in **~/.statestream/stviz.yml** (available after first launch of the visualization). The demonstration example in particular uses a resolution of 1600 x 900. The example can be started from the statestream folder with:
+A demonstration [example](examples/demo.st_graph) is provided with this repository for which neither an external dataset nor GPU support is required. It consists of a simple 4 layer network for classification of the first 10 roman numerals: I, II, III, IV, V, VI, VII, VIII, IX, X. Dependent on the monitor settings on the system, one may want to adapt the _screen_width_ and _screen_height_ setting in **~/.statestream/stviz.yml** (available after first launch of the visualization). The demonstration example in particular uses a resolution of 1600 x 900. 
+By default, this example will use the tensorflow backand. For the theano backend, the line 
+
+```
+backend: tensorflow
+```
+
+in the examples/demo.st_graph file has to be removed or replaced with the line
+
+```
+backend: theano
+```
+
+Now the demonstration can be started from the statestream folder with:
 
 
 ```
