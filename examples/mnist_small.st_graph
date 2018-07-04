@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2017 - for information on the respective copyright owner
-# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+# see the NOTICE file and/or the repository https://github.com/boschresearch/statestream
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #     * mnist (see interfaces/process_if_mnist.py)
 
 name: mnist_small
+backend: tensorflow
 agents: 128
 neuron_pools:
     image:
@@ -93,7 +94,7 @@ interfaces:
             mnist_image: image
             mnist_label: label
             mnist_pred: prediction
-        source_file: /opt/dl/data/mnist.pkl.gz
+        source_file: /local/data/datasets/mnist.pkl.gz
         fading: 0
         min_duration: 6
         max_duration: 6

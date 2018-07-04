@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2017 - for information on the respective copyright owner
-# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+# see the NOTICE file and/or the repository https://github.com/boschresearch/statestream
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -146,6 +146,35 @@ class rollout_view(object):
         self.the_input = get_the_input(self.net, dist_mat=self.dm)
         sorted_nps = clever_sort(self.net, self.the_input, the_input=self.the_input, dist_mat=self.dm)
 
+        # Determine maximum depth (maximum steps for sequential inference).
+        # TODO
+
+        # Determine which future NP states can be known (= rolled out) from 'now'.
+        self.valid_future_nps = []
+        # Recursively extend valid rollout tree starting with all NPs.
+        valid_list = [n for n in self.net["neuron_pools"]]
+        while valid_list:
+            self.valid_future_nps.append(copy.copy(valid_list))
+            valid_list = []
+            # Compute next list of valid NPs.
+            for n,N in self.net["neuron_pools"].items():
+                valid = True
+                no_sources = 0
+                # All sources of an NP have to be in the previous valid list.
+                for s,S in self.net["synapse_pools"].items():
+                    if S["target"] == n:
+                        no_sources += 1
+                        sources = [src for srcs in S['source'] for src in srcs]
+                        for src_np in sources:
+                            if src_np not in self.valid_future_nps[-1]:
+                                valid = False
+                                break
+                    if not valid:
+                        break
+                if valid and no_sources > 0:
+                    valid_list.append(n)
+
+
         # List of dicts representation of network for drawing.
         self.list_rep = self.get_list_rep(sorted_nps)
         self.dict_rep = self.get_dict_rep()
@@ -202,11 +231,13 @@ class rollout_view(object):
             rep['col'] = []
             rep['border'] = []
             rep['size'] = []
-            rep['row_height'] = 5 * self.name_size // 2
+            rep['row_height'] = max(5 * self.name_size // 2, 
+                                    (self.vparam['screen_height'] - 200) // int(1.5 * len(self.net['neuron_pools'])))
             rep['Y'] = copy.copy(overall_Y)
             overall_Y += rep['row_height']
             rep['mem'] = []
             rep['surf'] = []
+            rep['valid'] = []
             # The next is a list over all rollouts of this item.
             rep['rect'] = []
             for s,S in self.net['synapse_pools'].items():
@@ -228,8 +259,11 @@ class rollout_view(object):
                 rep['rect'].append(pg.Rect(0, 0, 2, 2))
                 rep['col'].append(copy.copy(self.np_color))
                 rep['border'].append(1)
-                rep['size'].append(copy.copy(self.item_size))
+#                rep['size'].append(copy.copy(self.item_size))
+                rep['size'].append(max(copy.copy(self.item_size), rep['row_height'] // 2))
+                rep['valid'].append(True)
             list_rep.append(copy.deepcopy(rep))
+
         return list_rep
 
 # =============================================================================
@@ -394,6 +428,53 @@ class rollout_view(object):
                                                                   [self.list_rep[item_idx]['row_height'], 
                                                                    self.list_rep[item_idx]['row_height']])
 
+
+# =============================================================================
+
+    def nonet_generate_sequence_updates(self):
+        """Generate the update schedule for sequential network inference.
+        """
+        self.nonet_sequence_updates = []
+        # Start with all inputs over the entire rollout duration.
+        updated_nps = [(i,t) for i in self.nonet_inputs for t in range(self.nonet_sequence_window)]
+        self.nonet_sequence_updates.append(updated_nps)
+        # All already updated np states [(np, t), ...(np, t)].
+        all_updated_nps = copy.copy(updated_nps)
+        # Proceed as long as states are getting updated.
+        while updated_nps:
+            updated_nps = []
+            # Loop over all (np, t).
+            for n in self.net["neuron_pools"]:
+                for t in range(self.nonet_sequence_window):
+                    # Check if (np, t) already updated.
+                    if not (n, t) in all_updated_nps:
+                        # Check if (np, t) can be updated.
+                        can_be_updated = True
+                        # Check if all sources of np are updated.
+                        sources = []
+                        for s,S in self.net["synapse_pools"].items():
+                            if S["target"] == n:
+                                sources += [src for srcs in S["source"] for src in srcs]
+                        for src_np in sources:
+                            if src_np == n:
+                                if t > 0:
+                                    if (n, t - 1) not in all_updated_nps:
+                                        can_be_updated = False
+                                        break
+                                # In case t == 0 recursives can always be updated.
+                            else:
+                                # Considering feed-forward connections.
+                                if (src_np, t) not in all_updated_nps:
+                                    can_be_updated = False
+                                    break
+                        if can_be_updated:
+                            updated_nps.append((n, t))
+            # Add updated NPs to schedule.
+            if updated_nps:
+                self.nonet_sequence_updates.append(copy.copy(updated_nps))
+            # Add updated NPs to list of all updated (np, t).
+            all_updated_nps += updated_nps
+
 # =============================================================================
 
     def fade_color(self, src_col, tgt_col, factor):
@@ -435,14 +516,33 @@ class rollout_view(object):
     def cb_button_LMB_click_break(self):
         '''System break button clicked, pause system.
         '''
-        if self.IPC_PROC['break'].value == 0:
-            self.IPC_PROC['break'].value = 1
-            # Change sprites for buttons.
-            self.buttons['one-step'].sprite = 'one-step'
+        if self.nonet:
+            pass
         else:
-            self.IPC_PROC['break'].value = 0
-            # Change sprites for buttons.
-            self.buttons['one-step'].sprite = 'empty'
+            if self.IPC_PROC['break'].value == 0:
+                self.IPC_PROC['break'].value = 1
+                # Change sprites for buttons.
+                self.buttons['one-step'].sprite = 'one-step'
+                self.buttons['break'].value = 1
+            else:
+                self.IPC_PROC['break'].value = 0
+                # Change sprites for buttons.
+                self.buttons['one-step'].sprite = 'empty'
+                self.buttons['break'].value = 0
+
+# =============================================================================
+  
+    def cb_button_LMB_click_nonet_mode(self):
+        """Toggle nonet playing mode: sequential / streaming.
+        """
+        if self.buttons['nonet_mode'].value == 0:
+            self.nonet_mode = "streaming"
+        if self.buttons['nonet_mode'].value == 1:
+            self.nonet_mode = "sequential"
+        self.current_mem = 0
+        self.nonet_elapsed = 0
+        self.nonet_phase = "update_input"
+        self.nonet_sequence_step = 0
 
 # =============================================================================
 
@@ -459,6 +559,49 @@ class rollout_view(object):
         '''System debug button was clicked (show some debug information).
         '''
         self.debug_flag = not self.debug_flag
+
+# =============================================================================
+
+    def cb_button_LMB_click_update_input_minus(self):
+        """Decrease speed for input update phase.
+        """
+        S = self.nonet_viz_phases[self.nonet_mode]
+        if S["update_input"]["duration"] > 1:
+            S["update_input"]["duration"] \
+                = max(1, S["update_input"]["duration"] // 2)
+    def cb_button_LMB_click_update_input_plus(self):
+        """Increase speed for input update phase.
+        """
+        S = self.nonet_viz_phases[self.nonet_mode]
+        S["update_input"]["duration"] \
+            = S["update_input"]["duration"] * 2
+
+
+    def cb_button_LMB_click_update_states_minus(self):
+        """Decrease speed for states update phase.
+        """
+        S = self.nonet_viz_phases[self.nonet_mode]
+        if S["update_states"]["duration"] > 1:
+            S["update_states"]["duration"] \
+                = max(1, S["update_states"]["duration"] // 2)
+    def cb_button_LMB_click_update_states_plus(self):
+        """Increase speed for states update phase.
+        """
+        S = self.nonet_viz_phases[self.nonet_mode]
+        S["update_states"]["duration"] \
+            = S["update_states"]["duration"] * 2
+
+    def cb_button_LMB_click_seq_win_minus(self):
+        """Decrease rollout window for sequential inference.
+        """
+        if self.nonet_sequence_window > 1:
+            self.nonet_sequence_window -= 1
+            self.nonet_generate_sequence_updates()
+    def cb_button_LMB_click_seq_win_plus(self):
+        """Increase rollout window for sequential inference.
+        """
+        self.nonet_sequence_window += 1
+        self.nonet_generate_sequence_updates()
 
 # =============================================================================
 
@@ -507,11 +650,13 @@ class rollout_view(object):
             N['col'] = []
             N['border'] = []
             N['size'] = []
+            N['valid'] = []
             for r in range(self.rollout + 1):
                 N['rect'].append(pg.Rect(0, 0, 2, 2))
                 N['col'].append(copy.copy(self.np_color))
                 N['border'].append(self.default_border)
-                N['size'].append(self.item_size)
+                N['size'].append(max(copy.copy(self.item_size), N['row_height'] // 2))
+                N['valid'].append(True)
         self.rollout_offsetX = (self.screen_width \
                                 - self.max_name_px - 4 * self.item_size \
                                 - (self.item_size * (2 + self.max_input_len))) \
@@ -554,16 +699,147 @@ class rollout_view(object):
         background.fill(self.cc(self.vparam['background_color']))
         self.second_bg_col = (60,60,20,0)
 
+        # Initialize some 'not-in-network-mode' variables.
+        self.nonet = False
+        # The dx offset for continuously moving visualization.
+        self.nonet_dx = 0.0
+        if not self.IPC_PROC:
+            self.nonet = True
+            # The following dictionary contains the viz schedules.
+            self.nonet_viz_phases = {
+                "sequential": {
+                    "update_input": {
+                        "next_phase": "update_states",
+                        "duration": self.vparam['FPS']
+                    },
+                    "update_states": {
+                        "next_phase": "update_input",
+                        "duration": self.vparam['FPS']
+                    }
+                },
+                "streaming": {
+                    "update_input": {
+                        "next_phase": "update_states",
+                        "duration": self.vparam['FPS']
+                    },
+                    "update_states": {
+                        "next_phase": "update_input",
+                        "duration": self.vparam['FPS']
+                    }
+                }
+            }
+            # Lenght of rollout window (backward) for sequential inference.
+            self.nonet_sequence_window = 3
+            self.nonet_sequence_step = 0
+            # Current network inference mode (only vor visualization!).
+            self.nonet_mode = "streaming"
+            # Current phase in visualization mode.
+            self.nonet_phase = "update_input"
+            # Current frames elapsed in current phase.
+            self.nonet_elapsed = 0
+            # Current step in input sequence (= nonet_colors).
+            self.nonet_step = 0
+            # Toggle statefull / 0-init for sequential inference.
+            self.nonet_sequence_stateful = False
+            self.nonet_sequence_stateful_rect = pg.Rect(0,0,2,2)
+            # List of looping network inputs.
+            self.nonet_colormaps = {
+                "color": [(255, 0, 0),
+                         (255, 127, 0),
+                         (255, 255, 0),
+                         (127, 255, 0),
+                         (0, 255, 0),
+                         (0, 255, 127),
+                         (0, 255, 255),
+                         (0, 127, 255),
+                         (0, 0, 255),
+                         (127, 0, 255),
+                         (255, 0, 255),
+                         (255, 0, 127)],
+                "pulse": [(0, 0, 0),
+                         (0, 0, 0),
+                         (127, 0, 0),
+                         (255, 0, 0),
+                         (127, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0)],
+                "step": [(0, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0),
+                         (255, 0, 0),
+                         (255, 0, 0),
+                         (255, 0, 0),
+                         (255, 0, 0),
+                         (255, 0, 0),
+                         (255, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0),
+                         (0, 0, 0)],
+                "zigzag": [(0, 0, 0),
+                         (43, 0, 0),
+                         (85, 0, 0),
+                         (127, 0, 0),
+                         (169, 0, 0),
+                         (213, 0, 0),
+                         (255, 0, 0),
+                         (213, 0, 0),
+                         (169, 0, 0),
+                         (127, 0, 0),
+                         (85, 0, 0),
+                         (43, 0, 0)]
+            }
+            # Currently selected colormap.
+            self.nonet_cm = "zigzag"
+            self.nonet_cm_text_rect = pg.Rect([0,0,2,2])
+            # Dict of all single colormap rects for selection.
+            self.nonet_cm_rects = {}
+            for cm in self.nonet_colormaps:
+                self.nonet_cm_rects[cm] = pg.Rect([0,0,2,2])
+            # Pre-blit sequences / colormaps.
+            self.nonet_cm_surfs = {}
+            for cm,CM in self.nonet_colormaps.items():
+                self.nonet_cm_surfs[cm] = pg.Surface((200, 20))
+                for i in range(len(CM)):
+                    pg.draw.rect(self.nonet_cm_surfs[cm],
+                                 self.cc(CM[i]),
+                                 [int(i * 200 / len(CM)), 0, int(200 / len(CM)), 20],
+                                 0)
+            # Flag if colormap selection is currently shown.
+            self.nonet_cm_selection_show = False
+            # Determine all network input nodes.
+            self.nonet_inputs = []
+            for i,I in self.net["interfaces"].items():
+                for o in I["out"]:
+                    tmp_target = o
+                    # Consider remapping.
+                    if "remap" in I:
+                        if o in I["remap"]:
+                            tmp_target = I["remap"][o]
+                    self.nonet_inputs.append(tmp_target)
+            # Determine state update schedule for sequential network inference.
+            # [update_step][list of (NP, time in rollout)]
+            self.nonet_sequence_updates = []
+            self.nonet_generate_sequence_updates()
+
         # Add surfaces for rollout view.
         for N in self.list_rep:
             for m in range(self.memory):
                 N['surf'][m] = pg.Surface([N['row_height'], N['row_height']])
 
+        row_height = max(5 * self.name_size // 2, 
+                                    (self.vparam['screen_height'] - 200) // int(1.5 * len(self.net['neuron_pools'])))
+        tmp_item_surf = pg.Surface([row_height, row_height])
+
         pg.mouse.set_visible(1)
         pg.key.set_repeat(1, 100)
 
         # Get shared memory.
-        if self.IPC_PROC:
+        if not self.nonet:
             self.shm = SharedMemory(self.net, 
                                     self.param,
                                     session_id=\
@@ -675,10 +951,11 @@ class rollout_view(object):
         # Add break and one-step buttons.
         X0 = 200
         Y0 = 8
-        if self.IPC_PROC:
-            self.buttons['break'] = self.wcollector.add_button(None, sprite=['pause', 'play'], 
-                                   pos=np.asarray([X0, Y0], dtype=np.float32), 
-                                   cb_LMB_clicked=lambda: self.cb_button_LMB_click_break())
+        self.buttons['break'] = self.wcollector.add_button(None, sprite=['pause', 'play'], 
+                               pos=np.asarray([X0, Y0], dtype=np.float32), 
+                               cb_LMB_clicked=lambda: self.cb_button_LMB_click_break())
+        self.buttons['break'].value = 1
+        if not self.nonet:
             self.buttons['break'].value = self.IPC_PROC['break'].value
             if self.IPC_PROC['break'].value == 1:
                 self.buttons['one-step'] = self.wcollector.add_button(None, sprite='one-step', 
@@ -692,6 +969,12 @@ class rollout_view(object):
         self.buttons['debug'] = self.wcollector.add_button(None, sprite='empty', 
                 pos=np.asarray([X0 + 3 * 32, Y0], dtype=np.float32), 
                 cb_LMB_clicked=lambda: self.cb_button_LMB_click_debug())
+        # In case nonet, add streaming / sequential mode button.
+        if self.nonet:
+            self.buttons['nonet_mode'] = self.wcollector.add_button(None, sprite=['minus', 'play'], 
+                    pos=np.asarray([X0 + 4 * 32, Y0], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_nonet_mode())
+            self.buttons['nonet_mode'].value = 0
         # Add plus / minus button for rollout.
         self.buttons['rollout-minus'] = self.wcollector.add_button(None, sprite='small left', 
                 pos=np.asarray([550, Y0], dtype=np.float32), 
@@ -699,27 +982,47 @@ class rollout_view(object):
         self.buttons['rollout-plus'] = self.wcollector.add_button(None, sprite='small right', 
                 pos=np.asarray([550 + 24, Y0], dtype=np.float32), 
                 cb_LMB_clicked=lambda: self.cb_button_LMB_click_rollout_plus())
-
-        if self.IPC_PROC:
-            self.buttons['memory-minus'] = self.wcollector.add_button(None, sprite='small left', 
-                    pos=np.asarray([550, Y0 + 24], dtype=np.float32), 
-                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_minus())
-            self.buttons['memory-plus'] = self.wcollector.add_button(None, sprite='small right', 
-                    pos=np.asarray([550 + 24, Y0 + 24], dtype=np.float32), 
-                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_plus())
-
+        # Add plus / minus button for memory.
+        self.buttons['memory-minus'] = self.wcollector.add_button(None, sprite='small left', 
+                pos=np.asarray([550, Y0 + 24], dtype=np.float32), 
+                cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_minus())
+        self.buttons['memory-plus'] = self.wcollector.add_button(None, sprite='small right', 
+                pos=np.asarray([550 + 24, Y0 + 24], dtype=np.float32), 
+                cb_LMB_clicked=lambda: self.cb_button_LMB_click_memory_plus())
+        # Add plus / minus button for temporal offset.
         self.buttons['dt-plus'] = self.wcollector.add_button(None, sprite='small left', 
                 pos=np.asarray([self.max_name_px // 2 - 40, self.header_height - 3 * self.name_size // 2 - 2], dtype=np.float32), 
                 cb_LMB_clicked=lambda: self.cb_button_LMB_click_dt_plus())
         self.buttons['dt-minus'] = self.wcollector.add_button(None, sprite='small right', 
                 pos=np.asarray([self.max_name_px // 2 + 32, self.header_height - 3 * self.name_size // 2 - 2], dtype=np.float32), 
                 cb_LMB_clicked=lambda: self.cb_button_LMB_click_dt_minus())
+        if self.nonet:
+            # Add plus / minus button for update input phase speed.
+            self.buttons['update_input-minus'] = self.wcollector.add_button(None, sprite='small left', 
+                    pos=np.asarray([740, Y0], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_update_input_minus())
+            self.buttons['update_input-plus'] = self.wcollector.add_button(None, sprite='small right', 
+                    pos=np.asarray([740 + 24, Y0], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_update_input_plus())
+            # Add plus / minus button for update state phase speed.
+            self.buttons['update_state-minus'] = self.wcollector.add_button(None, sprite='small left', 
+                    pos=np.asarray([740, Y0 + 24], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_update_states_minus())
+            self.buttons['update_state-plus'] = self.wcollector.add_button(None, sprite='small right', 
+                    pos=np.asarray([740 + 24, Y0 + 24], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_update_states_plus())
+            # Add plus / minus button for window size for sequential inference.
+            self.buttons['seq-win-minus'] = self.wcollector.add_button(None, sprite='small left', 
+                    pos=np.asarray([900, Y0 + 24], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_seq_win_minus())
+            self.buttons['seq-win-plus'] = self.wcollector.add_button(None, sprite='small right', 
+                    pos=np.asarray([900 + 24, Y0 + 24], dtype=np.float32), 
+                    cb_LMB_clicked=lambda: self.cb_button_LMB_click_seq_win_plus())
 
         # Load potential rollout view settings.
         self.load_rollout_view()
         self.update_rollout()
-        if self.IPC_PROC:
-            self.update_memory()
+        self.update_memory()
 
         # Some timers
         timer_overall = np.ones([12])
@@ -756,11 +1059,43 @@ class rollout_view(object):
             # Current viz frame.
             current_rv_frame += 1
 
+            # Update nonet visualization state.
+            if self.nonet:
+                if self.buttons["break"].value == 0:
+                    self.nonet_elapsed += 1
+                # Get mode and phase settings.
+                M = self.nonet_viz_phases[self.nonet_mode]
+                P = M[self.nonet_phase]
+                # Check elapsed > duration and update phase.
+                if self.nonet_elapsed >= P['duration']:
+                    self.nonet_elapsed = 0
+                    if self.nonet_mode == "streaming":
+                        self.nonet_phase = P['next_phase']
+                    elif self.nonet_mode == "sequential":
+                        if self.nonet_phase == "update_states":
+                            self.nonet_sequence_step += 1
+                            if self.nonet_sequence_step >= len(self.nonet_sequence_updates) - 1:
+                                self.nonet_sequence_step = 0
+                                self.nonet_phase = P['next_phase']
+                        elif self.nonet_phase == "update_input":
+                            self.nonet_phase = P['next_phase']
+                            self.nonet_sequence_step = 0
+                    if self.nonet_phase == "update_input":
+                        self.nonet_step += 1
+                # Update horizontal offset for continuous motion.
+                self.nonet_dx = 0.0
+                if self.nonet_phase == "update_input":
+                    self.nonet_dx = - float(self.rollout_offsetX) * float(self.nonet_elapsed) / P['duration']
+
             # Start viz timer.
             timer_overall[current_rv_frame % 12] = time.time()
 
             # Get current frame.
-            if self.IPC_PROC:
+            if self.nonet:
+                if self.buttons['break'].value == 0:
+                    current_frame += 1
+                    self.new_frame = True
+            else:
                 current_frame = int(copy.copy(self.IPC_PROC['now'].value))
                 # Determine beginning of new neural frame.
                 if current_frame > last_frame:
@@ -774,7 +1109,7 @@ class rollout_view(object):
             # =================================================================
             # Get all process states.
             # =================================================================
-            if self.IPC_PROC:
+            if not self.nonet:
                 for X in self.list_rep:
                     X['state'] = self.IPC_PROC['state'][self.shm.proc_id[X['name']][0]].value
             # =================================================================
@@ -782,11 +1117,72 @@ class rollout_view(object):
             # =================================================================
             # Update internal neural state memory.
             # =================================================================
-            if self.new_frame and self.memory > 0 and self.IPC_PROC:
+            if self.new_frame and self.memory > 0 and not self.nonet:
                 self.current_mem = (self.current_mem + 1) % self.memory
                 for n,N in enumerate(self.list_rep):
                     N['mem'][self.current_mem][:] = self.shm.dat[N['name']]['state'][0,:]
                     self.render_item(n, self.current_mem)
+
+            if self.nonet:
+                if self.nonet_mode == "streaming":
+                    if self.nonet_elapsed == 0:
+                        if self.nonet_phase == "update_input":
+                            self.current_mem = (self.current_mem + 1) % self.memory
+                        current_col = self.nonet_step % len(self.nonet_colormaps[self.nonet_cm])
+                        for n,N in enumerate(self.list_rep):
+                            if N['name'] in self.nonet_inputs:
+                                N['surf'][self.current_mem].fill(self.cc(self.nonet_colormaps[self.nonet_cm][current_col]))
+                            else:
+                                all_sources = list(set([s for srcs in N['src_nps'] for s in srcs]))
+                                for sn,sn_name in enumerate(all_sources):
+                                    SN = self.list_rep[self.dict_rep[sn_name]]
+                                    at_x = int(sn * N['row_height'] / len(N['src_nps']))
+                                    at_y = 0
+                                    scaled_surf = pg.transform.scale(SN['surf'][(self.current_mem - 1) % self.memory],
+                                                                     (int(N['row_height'] / len(N['src_nps'])), N['row_height']))
+                                    N['surf'][self.current_mem].blit(scaled_surf, (at_x, at_y))
+                elif self.nonet_mode == "sequential":
+                    if self.nonet_elapsed == 0 and self.nonet_phase == "update_input":
+                        current_col = self.nonet_step % len(self.nonet_colormaps[self.nonet_cm])
+                        # Erase entire memory.
+                        for n,N in enumerate(self.list_rep):
+                            if N['name'] in self.nonet_inputs:
+                                # Shift input memory and update now memory.
+                                for m in range(self.memory - 1):
+                                    N['surf'][m].blit(N['surf'][m + 1], (0, 0))
+                                N['surf'][-1].fill(self.cc(self.nonet_colormaps[self.nonet_cm][current_col]))
+                            else:
+                                for m in range(self.memory):
+                                    N['surf'][m].fill((0,0,0))
+                    if self.nonet_phase == "update_states":
+                        # Because of -1 shift between update_states and update_input we have to:
+                        if self.nonet_sequence_step == 0 and self.nonet_elapsed == 0:
+                            current_col = (self.nonet_step + 1) % len(self.nonet_colormaps[self.nonet_cm])
+                            for n,N in enumerate(self.list_rep):
+                                if N['name'] in self.nonet_inputs:
+                                    N['surf'][0].fill(self.cc(self.nonet_colormaps[self.nonet_cm][current_col]))
+                                else:
+                                    for m in range(self.memory):
+                                        N['surf'][m].fill((0,0,0))
+                        # Now really update states.
+                        if self.nonet_elapsed == 0:
+                            for nt in self.nonet_sequence_updates[self.nonet_sequence_step + 1]:
+                                N = self.list_rep[self.dict_rep[nt[0]]]
+                                all_sources = list(set([s for srcs in N['src_nps'] for s in srcs]))
+                                for sn,sn_name in enumerate(all_sources):
+                                    SN = self.list_rep[self.dict_rep[sn_name]]
+                                    at_x = int(sn * N['row_height'] / len(N['src_nps']))
+                                    at_y = 0
+                                    if sn_name == N['name']:
+                                        scaled_surf = pg.transform.scale(SN['surf'][(nt[1] - self.nonet_sequence_window) % self.memory],
+                                                                         (int(N['row_height'] / len(N['src_nps'])), N['row_height']))
+                                        if nt[1] == 0:
+                                            scaled_surf.fill((0,0,0))
+                                    else:
+                                        scaled_surf = pg.transform.scale(SN['surf'][nt[1] - self.nonet_sequence_window + 1],
+                                                                         (int(N['row_height'] / len(N['src_nps'])), N['row_height']))
+                                    N['surf'][nt[1] - self.nonet_sequence_window + 1].blit(scaled_surf, (at_x, at_y))
+
             # =================================================================
 
             
@@ -882,7 +1278,6 @@ class rollout_view(object):
                 
 
 
-
             # =================================================================
             # Check LMB click / hold / drag.
             # =================================================================
@@ -891,6 +1286,24 @@ class rollout_view(object):
                 LMB_click = self.wcollector.LMB_clicked(POS)
             if RMB_click:
                 RMB_click = self.wcollector.RMB_clicked(POS)
+
+            # Determine if to show sequence / colormap selection.
+            self.nonet_cm_selection_show = False
+            if self.nonet:
+                if self.nonet_cm_text_rect.collidepoint(POS):
+                    self.nonet_cm_selection_show = True
+                for cm in self.nonet_colormaps:
+                    if self.nonet_cm_rects[cm].collidepoint(POS):
+                        self.nonet_cm_selection_show = True
+                        if LMB_click:
+                            self.nonet_cm = copy.copy(cm)
+                            LMB_click = False
+                    self.nonet_cm_rects[cm] = pg.Rect(0,0,2,2)
+                if LMB_click:
+                    if self.nonet_sequence_stateful_rect.collidepoint(POS):
+                        self.nonet_sequence_stateful = not self.nonet_sequence_stateful
+                        LMB_click = False
+
             # If nothing clicked, clear selection.
             if LMB_click:
                 for N in self.list_rep:
@@ -980,7 +1393,7 @@ class rollout_view(object):
                     for r in range(self.rollout + 1):
                         N['col'][r] = copy.copy(self.np_color)
                         N['border'][r] = copy.copy(self.default_border)
-                        N['size'][r] = copy.copy(self.item_size)
+                        N['size'][r] = max(copy.copy(self.item_size), N['row_height'] // 2)
             elif self.mouse_over[0] == 'item':
                 self.list_rep[self.dict_rep[self.mouse_over[1]]]['col'][self.mouse_over[2]] = (0,0,0)
                 self.list_rep[self.dict_rep[self.mouse_over[1]]]['border'][self.mouse_over[2]] = copy.copy(self.rollback_border)
@@ -1033,22 +1446,32 @@ class rollout_view(object):
                                    self.screen_height - N['row_height'])
                     dX = int(src_sp * (self.rollout_offsetX // (2 * len(N['src_sps']))))
                     for r in range(self.rollout):
+                        x_plot1 = int(X + dX)
+                        x_plot2a = int(X + self.rollout_offsetX // 2)
+                        x_plot2b = int(X - self.rollout_offsetX // 2)
+                        if r > 0:
+                            x_plot1 = int(X + dX + self.nonet_dx)
+                            x_plot2a = int(X + self.rollout_offsetX // 2 + self.nonet_dx)
+                            x_plot2b = int(X - self.rollout_offsetX // 2 + self.nonet_dx)
                         # Plot connection sp -> target np
                         if Y > 0 and Y <= self.screen_height:
                             pg.draw.line(self.screen, 
                                          self.cc((127, 127, 127)), 
-                                         (int(X + dX), int(Y_sp)), 
-                                         (int(X + self.rollout_offsetX // 2), int(Y + N['row_height'] // 2)), 2)
+                                         (x_plot1, int(Y_sp)), 
+                                         (x_plot2a, int(Y + N['row_height'] // 2)), 2)
                         # Plot connectionS src_nps -> sp
                         for src_np in N['src_nps'][src_sp]:
                             src_np_id = self.dict_rep[src_np]
                             src_np_Y = self.header_height + N['row_height'] \
                                        + self.list_rep[src_np_id]['Y'] + self.Y_offset
+                            x_off = 0
+                            if self.list_rep[src_np_id]['mode'] == 'map':
+                                x_off = N['row_height'] // 2
                             if src_np_Y > 0 and src_np_Y <= self.screen_height:
                                 pg.draw.line(self.screen, 
                                              self.cc((127, 127, 127)), 
-                                             (int(X + dX), int(Y_sp)), 
-                                             (int(X - self.rollout_offsetX // 2), int(src_np_Y + N['row_height'] // 2)), 2)
+                                             (x_plot1, int(Y_sp)), 
+                                             (x_plot2b + x_off, int(src_np_Y + N['row_height'] // 2)), 2)
                         X += self.rollout_offsetX
             # Draw SPs.
             for n,N in enumerate(self.list_rep):
@@ -1064,8 +1487,11 @@ class rollout_view(object):
                                    self.screen_height - N['row_height'])
                     dX = int(src_sp * (self.rollout_offsetX // (2 * len(N['src_sps']))))
                     for r in range(self.rollout):
+                        x_plot = int(X + dX)
+                        if r > 0:
+                            x_plot = int(X + dX + self.nonet_dx)
                         plot_circle(self.screen, 
-                                    int(X + dX), int(Y_sp), self.item_size // 4, 
+                                    x_plot, int(Y_sp), self.item_size // 4, 
                                     self.cc(self.text_color), 
                                     self.cc(self.np_color), 
                                     2)
@@ -1095,15 +1521,43 @@ class rollout_view(object):
                     # Blit rolled-out item.
                     X += self.max_name_px + self.item_size 
                     for r in range(self.rollout + 1):
-                        if N['mode'] == 'map' and r + self.dt <= 0 and abs(r + self.dt) < self.memory and self.IPC_PROC:
+                        if N['mode'] == 'map' and r + self.dt <= 0 and abs(r + self.dt) < self.memory:
+                            x_plot = int(X - N['row_height'] // 2)
+                            if r > 0:
+                                x_plot = int(X - N['row_height'] // 2 + int(self.nonet_dx))
                             tmp_idx = (self.current_mem + r + self.dt) % self.memory
-                            N['rect'][r] = self.screen.blit(N['surf'][tmp_idx], (int(X - N['row_height'] // 2), int(Y)))
+                            if self.nonet:
+                                if self.nonet_phase == "update_input":
+                                    tmp_idx = (self.current_mem + r + self.dt - 1) % self.memory
+                            N['rect'][r] = self.screen.blit(N['surf'][tmp_idx], 
+                                                            (x_plot, int(Y)))
+                            if self.nonet:
+                                if self.nonet_mode == "sequential" and self.nonet_phase == "update_states":
+                                    dur = self.nonet_viz_phases["sequential"]["update_states"]["duration"]
+                                    for nt in self.nonet_sequence_updates[self.nonet_sequence_step + 1]:
+                                        if nt[0] == N['name'] and nt[1] - self.nonet_sequence_window + 1 == r + self.dt:
+                                            current_col = np.clip(int(255 * (1.0 - self.nonet_elapsed / float(dur))), 0, 255)
+                                            current_col = (current_col, current_col, current_col)
+                                            tmp_item_surf.fill(self.cc(current_col))
+                                            self.screen.blit(tmp_item_surf, (x_plot, int(Y)))
+                            # Blit nice box arround map.
+                            pg.draw.rect(self.screen, self.cc((127,127,127)), N['rect'][r], 2)
                         else:
+                            x_plot = int(X)
+                            if r > 0:
+                                x_plot = int(X + int(self.nonet_dx))
+                            plot_col = N['col'][r]
+                            if r + self.dt > 0:
+                                if len(self.valid_future_nps) <= r + self.dt:
+                                    plot_col = (60,60,60)
+                                else:
+                                    if N['name'] not in self.valid_future_nps[r + self.dt]:
+                                        plot_col = (60,60,60)
                             N['rect'][r] = plot_circle(self.screen, 
-                                                       int(X), int(Y + N['row_height'] // 2), 
+                                                       x_plot, int(Y + N['row_height'] // 2), 
                                                        N['size'][r] // 2, 
                                                        self.cc(self.text_color), 
-                                                       self.cc(N['col'][r]), 
+                                                       self.cc(plot_col), 
                                                        N['border'][r])
                         X += self.rollout_offsetX
 
@@ -1205,7 +1659,7 @@ class rollout_view(object):
             # =================================================================
             # Plot debug and viz. profiler information.
             # =================================================================
-            if self.debug_flag:
+            if self.debug_flag and not self.nonet:
                 for i in range(len(self.debug_items)):
                     self.screen.blit(self.fonts['small'].render(str(self.debug_items[i]), 
                                                                 1, 
@@ -1247,22 +1701,55 @@ class rollout_view(object):
                                                         1, 
                                                         self.cc(self.vparam['text_color'])), 
                              (436, 12))
-            if self.IPC_PROC:
+            if not self.nonet:
                 # Print overall timing information.
                 self.screen.blit(self.fonts['small'].render(' fps nn: ' + str(NNFPS), 
                                                             1, 
                                                             self.cc(self.vparam['text_color'])), 
                                  (10, 10))
-                # Blit current frame.
-                self.screen.blit(self.fonts['small'].render('  frame: ' + str(int(current_frame)), 
+            # Blit current frame.
+            self.screen.blit(self.fonts['small'].render('  frame: ' + str(int(current_frame)), 
+                                                        1, 
+                                                        self.cc(self.vparam['text_color'])), 
+                             (10, 50))
+            # Blit current memory.
+            self.screen.blit(self.fonts['small'].render('memory: ' + str(int(self.memory)), 
+                                                        1, 
+                                                        self.cc(self.vparam['text_color'])), 
+                             (436, 12 + 24))
+            if self.nonet:
+                # Blit current update input phase speed.
+                speed = int(self.nonet_viz_phases[self.nonet_mode]["update_input"]["duration"])
+                self.screen.blit(self.fonts['small'].render('upd.in.: ' + str(speed), 
                                                             1, 
                                                             self.cc(self.vparam['text_color'])), 
-                                 (10, 50))
-                # Blitt current memory
-                self.screen.blit(self.fonts['small'].render('memory: ' + str(int(self.memory)), 
+                                 (620, 12))
+                # Blit current update state phase speed.
+                speed = int(self.nonet_viz_phases[self.nonet_mode]["update_states"]["duration"])
+                self.screen.blit(self.fonts['small'].render('upd.st.: ' + str(speed), 
                                                             1, 
                                                             self.cc(self.vparam['text_color'])), 
-                                 (436, 12 + 24))
+                                 (620, 12 + 24))
+                # Blit colormap selection text.
+                self.nonet_cm_text_rect = self.screen.blit(self.fonts['small'].render('sequences', 
+                                                                                      1, 
+                                                                                      self.cc(self.vparam['text_color'])), 
+                                                           (800, 12 + 24))
+                if self.nonet_cm_selection_show:
+                    cntr = 0
+                    for cm,CM in self.nonet_colormaps.items():
+                        self.nonet_cm_rects[cm] = self.screen.blit(self.nonet_cm_surfs[cm], (800, 12 + 24 + 20 * cntr))
+                        cntr += 1
+                # Blit statefull toggle text during sequential inference.
+                if self.nonet_mode == 'sequential':
+                    plot_col = (0,0,255)
+                    if not self.nonet_sequence_stateful:
+                        plot_col = self.vparam['text_color']
+                    self.nonet_sequence_stateful_rect = self.screen.blit(self.fonts['small'].render('stateful ', 
+                                                                                      1, 
+                                                                                      self.cc(plot_col)), 
+                                                                         (800, 12))
+
 
 
 

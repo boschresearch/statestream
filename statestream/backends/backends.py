@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2017 - for information on the respective copyright owner
-# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+# see the NOTICE file and/or the repository https://github.com/boschresearch/statestream
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@ _B = None
 def import_backend(net, param, item_name):
     global _BACKEND
     global _B
+
+    mps = False
 
     if _B is None and net is None:
         raise TypeError("Attempt to import non-initialized backend: " + str(item_name))
@@ -63,6 +65,7 @@ def import_backend(net, param, item_name):
         else:
             raise TypeError("Unknown device: " + str(device))
 
+        # Set FLAGS according to backend.
         if backend == "theano":
             # Define session / process dependent compile directory.
             base_compiledir = os.path.expanduser("~") + "/.statestream/compiledirs/" + str(item_name)
@@ -73,31 +76,77 @@ def import_backend(net, param, item_name):
             tmp = os.environ.get("CUDA_VISIBLE_DEVICES", "")
             if dev_type == "gpu":
                 loc_device = "cuda0"
-                os.environ["CUDA_VISIBLE_DEVICES"] = str(visible_devices[dev_id])
             # Make only the specified device visible.
             os.environ["THEANO_FLAGS"] = param["core"]["THEANO_FLAGS"] \
                                          + ",device=" + loc_device \
                                          + ",base_compiledir=" + base_compiledir
-            import statestream.backends.backend_theano as B
-            _B = B
-            os.environ["CUDA_VISIBLE_DEVICES"] = tmp
         elif backend == "tensorflow":
             # Set device.
             loc_device = "cpu"
             tmp = os.environ["CUDA_VISIBLE_DEVICES"]
-            if dev_type == "gpu":
-                os.environ["CUDA_VISIBLE_DEVICES"] = str(visible_devices[dev_id])
-            else:
-                # In case of cpu, use invalid visible device to mask all devices.
-                os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-            import statestream.backends.backend_tensorflow as B
-            B.tf_get_session()
-            _B = B
-            os.environ["CUDA_VISIBLE_DEVICES"] = tmp
+#               # In case of cpu, use invalid visible device to mask all devices.
+#                os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
         else:
             raise ImportError("Unknown backend: " + str(backend))
 
+
+        # Set CUDA_VISIBLE_DEVICES to specified device.
+        if dev_type == "gpu":
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(visible_devices[dev_id])
+
+
+            # Load MPS only in case CUDA_MPS_LOG / PIPE not already set and hence MPS already loaded.
+            if mps and "CUDA_MPS_LOG_DIRECTORY" not in os.environ and "CUDA_MPS_PIPE_DIRECTORY" not in os.environ:
+                # Determine CUDA_MPS_LOG / PIPE folders.
+                CUDA_MPS_LOG_DIRECTORY = "/tmp/" + os.getlogin() + "/mps_" + str(visible_devices[dev_id]) + "/log"
+                CUDA_MPS_PIPE_DIRECTORY = "/tmp/" + os.getlogin() + "/mps_" + str(visible_devices[dev_id]) + "/pipe"
+                # Set environment variables.
+                os.environ["CUDA_MPS_LOG_DIRECTORY"] = CUDA_MPS_LOG_DIRECTORY
+                os.environ["CUDA_MPS_PIPE_DIRECTORY"] = CUDA_MPS_PIPE_DIRECTORY
+                # Create folders.
+                try:
+                    os.mkdir("/tmp/" + os.getlogin())
+                except:
+                    pass
+                try:
+                    os.mkdir("/tmp/" + os.getlogin() + "/mps_" + str(visible_devices[dev_id]))
+                except:
+                    pass
+                try:
+                    os.mkdir(CUDA_MPS_LOG_DIRECTORY)
+                except:
+                    pass
+                try:
+                    os.mkdir(CUDA_MPS_PIPE_DIRECTORY)
+                except:
+                    pass
+                # Start MPS.
+                try:
+                    os.system("nvidia-cuda-mps-control -d")
+                except:
+                    pass
+
+            # Delete CUDA_VISIBLE_DEVICES.
+            if mps and "CUDA_VISIBLE_DEVICES" in os.environ:
+                del os.environ["CUDA_VISIBLE_DEVICES"]
+        else:
+            os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+
+        # Import backend.
+        if backend == "theano":
+            import statestream.backends.backend_theano as B
+        elif backend == "tensorflow":
+            import statestream.backends.backend_tensorflow as B
+            B.tf_get_session()
+
+
+        # Set global backend.
+        _B = B
         _BACKEND = backend
+
+        #os.environ["CUDA_VISIBLE_DEVICES"] = tmp
+
 
     return _B
 

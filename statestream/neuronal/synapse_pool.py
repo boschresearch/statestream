@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2017 - for information on the respective copyright owner
-# see the NOTICE file and/or the repository https://github.com/VolkerFischer/statestream
+# see the NOTICE file and/or the repository https://github.com/boschresearch/statestream
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -272,7 +272,6 @@ class SynapsePool(object):
                         self.pooling[-1][-1] = int(self.source_np[f][i].shape[2] / self.target_np.shape[2])
                     elif self.target_np.shape[2] > self.source_np[f][i].shape[2]:
                         self.pooling[-1][-1] = -int(self.target_np.shape[2] / self.source_np[f][i].shape[2])
-
         #print("\n" + self.name + " rf: " + str(self.rf_size) + " pool: " + str(self.pooling))
             
         # Initialize post synaptics with empty.
@@ -552,6 +551,7 @@ class SynapsePool(object):
                                                                    subsample=(1, 1)))
                                 _SCALED_CONV[-1].append(self.B.concatenate(out_state))
                             else:
+                                #src_shape
                                 _SCALED_CONV[-1].append(self.B.conv2d(ppp_state, 
                                                                       weights,
                                                                       border_mode=(0, 0),
