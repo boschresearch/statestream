@@ -36,23 +36,28 @@ neuron_pools:
         shape: [16, 16, 16]
         tags: [hidden]
         act: relu
+    spikes:
+        shape: [16, 16, 16]
 synapse_pools:
     ret_hidden:
-        source:
-        - [noise]
+        source: [[noise]]
         target: hidden
         rf: 5
     sp_spiky:
-        source: 
-        - [hidden]
+        source: [[hidden]]
         target: np_spiky
         init W_0_0: id
         rf: 1
     sp_spiky_self:
-        source:
-        - [np_spiky]
+        source: [[np_spiky]]
         target: np_spiky
         init W_0_0: id
         rf: 1
+    sp_spikes:
+        source: [[np_spiky]]
+        target: spikes
+        init W_0_0: id
+        rf: 1
+        pact: [['B.relu($, thresh=1.0)']]
 plasticities: {}
 interfaces: {}

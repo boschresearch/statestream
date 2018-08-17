@@ -17,6 +17,7 @@
 
 
 import numpy as np
+import copy as copy
 
 from statestream.utils.helper import is_scalar_shape
 from statestream.meta.synapse_pool import sp_shm_layout, sp_init, sp_get_dict
@@ -300,8 +301,9 @@ class SynapsePool(object):
             The updated activation function that is suitable for eval(activation).
         """
         # First, replace all functions with the local backend.
+        _activation = copy.copy(activation)
         for fnc in self.B._FUNCTIONS:
-            _activation = activation.replace("B." + fnc, "self.B." + fnc)
+            _activation = _activation.replace("B." + fnc, "self.B." + fnc)
         # Insert state variable.
         if _activation.find('$') != -1:
             try:
@@ -310,6 +312,7 @@ class SynapsePool(object):
                 print("\nError: Unable to evaluate activation function: " + str(activation))
         else:
             _activation = "self.B." + _activation + "(" + placeholder + ")"
+
         return _activation
 
 
