@@ -59,6 +59,7 @@ _FUNCTIONS = ["variable",
 			  "argmax",
 			  "clip",
               "abs",
+              "sign",
 			  "Id",
 			  "sqrt",
 			  "tanh",
@@ -218,6 +219,8 @@ def clip(x, min_value, max_value):
 def abs(x):
     return T.abs_(x)
 
+def sign(x, thresh=0.0):
+    return T.sgn(x - thresh)
 
 
 
@@ -235,10 +238,13 @@ def tanh(x):
     """
     return T.tanh(x)
 
-def relu(x):
+def relu(x, thresh=0.0):
     """ReLU function: a(x) = max(x, 0)
     """
-    return T.maximum(x, 0)
+    if thresh == 0.0:
+        return T.maximum(x, 0)
+    else:
+        return T.maximum(x - thresh, 0)
 
 def selu(x, llambda=1.0507, alpha=1.6733):
     """SeLU function. See also the elu activation.

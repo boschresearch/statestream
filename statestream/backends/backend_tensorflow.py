@@ -62,6 +62,7 @@ _FUNCTIONS = ["variable",
               "argmax",
               "clip",
               "abs",
+              "sign",
               "Id",
               "sqrt",
               "tanh",
@@ -240,7 +241,8 @@ def clip(x, min_value, max_value):
 def abs(x):
     return tf.abs(x)
 
-
+def sign(x, thresh=0.0):
+    return tf.sign(x - thresh)
 
 
 
@@ -257,11 +259,14 @@ def tanh(x):
     """
     return tf.nn.tanh(x)
 
-def relu(x):
+def relu(x, thresh=0.0):
     """ReLU function: a(x) = max(x, 0)
     """
-    return tf.nn.relu(x)
-
+    if thresh == 0.0:
+      return tf.nn.relu(x)
+    else:
+      return tf.nn.relu(x - thresh)
+      
 def selu(x, llambda=1.0507, alpha=1.6733):
     """SeLU function. See also the elu activation.
 
@@ -512,7 +517,7 @@ def maximize(x):
 
 
 
-def warp_transform(conv_input, input_shape, x_offset, y_offset):
+def warp_transform(conv_input, input_shape, output_shape, **kwargs):
     """Transforms features of conv_input using x_offset, y_offset.
 
     Parameter:
@@ -521,10 +526,15 @@ def warp_transform(conv_input, input_shape, x_offset, y_offset):
         array of shape [batch_size, channels, width, height]
     input_shape:
         the shape of conv_input: [batch_size, channels, width, height]
-    x_offset: 
-        array of shape [batch_size, 1, width, height]
-    y_offset:
-        array of shape [batch_size, 1, width, height]
+    output_shape:
+        the spatial shape of the transformed output: [width, height]
+
+
+    **kwargs:
+    x_pos, y_pos: [1, output_shape], [1, output_shape]
+        Contains coordinates in [0,1] for every output pixel.
+    theta: [6, 1, 1]
+        A single parameter set for a spatial transformation.
 
     Return:
     -------
@@ -543,18 +553,33 @@ def warp_transform(conv_input, input_shape, x_offset, y_offset):
     channels = input_shape[1]
     height = input_shape[2]
     width = input_shape[3]
+    output_height = output_shape[0]
+    output_width = output_shape[1]
 
-    # Generate grid.
-    grid_x, grid_y = np.meshgrid(np.linspace(0.0, width - 1.0, width),
-                           np.linspace(0.0, height - 1.0, height))
-    # Flatten grid.
-    flatgrid_x = np.reshape(grid_x, (1, -1))
-    flatgrid_y = np.reshape(grid_y, (1, -1))
-    flatgrid_x = np.tile(flatgrid_x, np.stack([batch_size, 1])).flatten()
-    flatgrid_y = np.tile(flatgrid_y, np.stack([batch_size, 1])).flatten()
     # Compute coordinates.
-    x = flatgrid_x + flatten(x_offset) * width
-    y = flatgrid_y + flatten(y_offset) * height
+#    x = flatgrid_x + flatten(x_offset) * width
+#    y = flatgrid_y + flatten(y_offset) * height
+
+    if "x_pos" in kwargs and "y_pos" in kwargs:
+        x = flatten(kwargs["x_pos"]) * width
+        y = flatten(kwargs["y_pos"]) * height
+    elif "theta" in kwargs:
+        # Generate grid.
+        grid_x, grid_y = np.meshgrid(np.linspace(0.0, output_width - 1.0, output_width),
+                           np.linspace(0.0, output_height - 1.0, output_height))
+        # Flatten grid.
+        flatgrid_x = np.reshape(grid_x, (1, -1))
+        flatgrid_y = np.reshape(grid_y, (1, -1))
+        tf_flatgrid_x = tf.constant(np.tile(flatgrid_x, np.stack([batch_size, 1])).flatten(), dtype="float32")
+        tf_flatgrid_y = tf.constant(np.tile(flatgrid_y, np.stack([batch_size, 1])).flatten(), dtype="float32")
+        tf_flatgrid_1 = tf.constant(np.ones(flatgrid_x.shape()), dtype="float32")
+        tf_flatgrid = tf.stack([tf_flatgrid_x, tf_flatgrid_y, tf_flatgrid_1], 0)
+        xy = tf.matmul(tf.reshape(kwargs["theta"], (-1, 2, 3)), tf_flatgrid)
+        x = tf.reshape(tf.slice(xy, [0, 0, 0], [-1, 1, -1]), [-1])
+        y = tf.reshape(tf.slice(xy, [0, 1, 0], [-1, 1, -1]), [-1])
+    else:
+        raise ValueError
+
     # Compute / clip indices.
     x0 = cast(floor(x), "int32")
     x1 = x0 + 1
@@ -566,7 +591,8 @@ def warp_transform(conv_input, input_shape, x_offset, y_offset):
     y1 = clip(y1, 0, height - 1)
 
     x_tmp = np.arange(batch_size, dtype=np.int32) * width * height
-    rep = dimshuffle(ones((int(height * width),), dtype='int32'), ('x', 0))
+#    rep = dimshuffle(ones((int(height * width),), dtype='int32'), ('x', 0))
+    rep = dimshuffle(ones((int(output_height * output_width),), dtype='int32'), ('x', 0))
     base = flatten(dot(reshape(x_tmp, (-1, 1)), rep))
 
     base_y0 = base + y0 * width
@@ -591,9 +617,9 @@ def warp_transform(conv_input, input_shape, x_offset, y_offset):
     wd = dimshuffle(((x - x0_f) * (y - y0_f)), (0, 'x'))
     interpolated = sum([wa * Ia, wb * Ib, wc * Ic, wd * Id], axis=0)
     interpolated = reshape(cast(interpolated, "float32"), 
-                           np.stack([batch_size, height, width, channels]))
-    print("\nTRAFOSHAPE: " + str(interpolated.get_shape().as_list()))
-    return dimshuffle(interpolated, (0, 3, 1, 2))
+                           np.stack([batch_size, output_height, output_width, channels]))
+    # print("\nTRAFOSHAPE: " + str(interpolated.get_shape().as_list()))
+    return dimshuffle(interpolated, (0, 3, 2, 1))
 
 
 
