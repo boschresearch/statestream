@@ -94,6 +94,7 @@ def cgraphics_colorcode(source, w, h, cm, colorcorrect):
     The colorcorrect is performed in-place, hence source holds the corrected
     values.
     """
+    #TODO: Check for NaNs in 'source'.
     return libcd.cgraphics_colorcode(np.double(source),
                                      w,
                                      h, 

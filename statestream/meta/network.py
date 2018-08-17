@@ -1020,30 +1020,24 @@ class MetaNetwork(object):
                                 is_sane = False
                 # Get list of all sources.
                 sources = [src for sublist in S["source"] for src in sublist]
-                rf = S.get("rf", [[]])
+                rf = S.get("rf", [[1]])
+                if isinstance(rf, int):
+                    rf = [[rf]]
                 # rf may not be a list of list only iff one source.
                 if not isinstance(rf, list) and len(sources) != 1:
                     print("    Error: For sp " + s \
                           + " Found non-list rf parameter for sp with more than one source.")
                     is_sane = False
                 # Check spatiality of sources.
-                for src in sources:
+                rfs = [r for sublist in rf for r in sublist]
+                for src, rf in zip(sources, rfs):
                     if src in self.net.get('neuron_pools', {}):
                         source_shape = np_state_shape(self.net, src)
                         if source_shape[2] == 1 and source_shape[3] == 1:
-                            if "rf" in S:
-                                if isinstance(S["rf"], list):
-                                    for srcs in S["rf"]:
-                                        for rf in srcs:
-                                            if rf != 1:
-                                                print("    Error: For sp " + s \
-                                                      + " source np " + str(src) + " has no space, but rf defined.")
-                                                is_sane = False
-                                else:
-                                    if S["rf"] not in [0, 1, None]:
-                                        print("    Error: For sp " + s \
-                                              + " source np " + str(src) + " has no space, but rf defined.")
-                                        is_sane = False
+                            if rf != 1:
+                                print("    Error: For sp " + s \
+                                      + " source np " + str(src) + " has no space, but rf defined: " + str(rf))
+                                is_sane = False
         # Check consistancy of spatial dims for connected nps.
         for s, S in self.net.get("synapse_pools", {}).items():
             if "source" in S and "target" in S:
