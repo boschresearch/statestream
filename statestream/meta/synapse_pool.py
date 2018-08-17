@@ -407,7 +407,19 @@ def sp_init(net, name, dat_name, dat_layout, mode=None):
                     elif dat_layout.shape[0] > dat_layout.shape[1] and dat_layout.shape[0] % dat_layout.shape[1] == 0:
                         _factor = dat_layout.shape[0] // dat_layout.shape[1]
                         eye = np.eye(dat_layout.shape[1])
-                        one = np.ones([_factor,1])
+                        one = np.ones([_factor, 1])
+                        if init_as == "id":
+                            kron = np.kron(eye, one)
+                        else:
+                            kron = np.kron(one, eye)
+                        for f_tgt in range(dat_layout.shape[0]):
+                            for f_src in range(dat_layout.shape[1]):
+                                dat_value[f_tgt, f_src, dat_layout.shape[2] // 2, dat_layout.shape[3] // 2] \
+                                    = kron[f_tgt, f_src]
+                    elif dat_layout.shape[0] < dat_layout.shape[1] and dat_layout.shape[1] % dat_layout.shape[0] == 0:
+                        _factor = dat_layout.shape[1] // dat_layout.shape[0]
+                        eye = np.eye(dat_layout.shape[0])
+                        one = np.ones([1, _factor])
                         if init_as == "id":
                             kron = np.kron(eye, one)
                         else:
