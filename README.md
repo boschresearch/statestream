@@ -159,7 +159,7 @@ The demonstration example does not make use of GPU acceleration, but in order to
 Demonstration example
 ---------------------
 
-A demonstration [example](examples/demo.st_graph) is provided with this repository for which neither an external dataset nor GPU support is required. It consists of a simple 4 layer network for classification of the first 10 roman numerals: I, II, III, IV, V, VI, VII, VIII, IX, X. Dependent on the monitor settings on the system, one may want to adapt the _screen_width_ and _screen_height_ setting in **~/.statestream/stviz.yml** (available after first launch of the visualization). The demonstration example in particular uses a resolution of 1600 x 900. 
+A demonstration [example](examples/demo.st_graph) is provided with this repository for which neither an external dataset nor GPU support is required. It consists of a simple 4 layer network for classification of the first 10 roman numerals: I, II, III, IV, V, VI, VII, VIII, IX, X. Dependent on the monitor settings on the system, one may want to adapt the _screen_width_ and _screen_height_ setting in **~/.statestream/stviz.yml** (available after first launch of the visualization) and the backend setting in the demo.st_graph specification. The demonstration example in particular uses a resolution of 1600 x 900. 
 By default, this example will use the tensorflow backand. For the theano backend, the line 
 
 ```
@@ -211,7 +211,7 @@ Wed, 21 Dec 2016 12:44:31 @ 00000732 << <<
 
 To end the demonstration, enter **exit** in the statestream terminal.
 
-Before running other provided examples, please set __visible_devices__ in **~/.statestream/stcore.yml** configuration file and read documentation on [devices](docs/devices.md). Also see the network [specification](docs/network_specification.md) and adapt especially paths and local devices specified in the **st_graph** example files. For more information on the statestream terminal and visualization, please visit the [documentation](docs/README.md). Good places to start further reading are:
+Before running other provided examples, please set __visible_devices__ in **~/.statestream/stcore.yml** configuration file and read documentation on [devices](docs/devices.md). Also see the network [specification](docs/network_specification.md) and adapt especially paths, local devices, and the backend specified in the **st_graph** example files. For more information on the statestream terminal and visualization, please visit the [documentation](docs/README.md). Good places to start further reading are:
 
 * [Device handling](docs/devices.md)
 * [Getting creative](docs/getting_creative.md)
