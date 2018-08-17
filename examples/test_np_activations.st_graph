@@ -22,6 +22,7 @@
 
 name: test_np_activations
 agents: 4
+backend: tensorflow
 neuron_pools:
     np_Id:
         shape: [16, 16, 16]
@@ -71,6 +72,9 @@ neuron_pools:
     np_explicit2:
         shape: [16, 16, 16]
         act: B.exp($) * B.sigmoid($)
+    np_reluthresh:
+        shape: [16, 16, 16]
+        act: B.relu($, thresh=0.5)
     image:
         shape: [1, 32, 32]
         tags: [sensor]
@@ -177,6 +181,12 @@ synapse_pools:
         source: 
         - [hidden]
         target: np_explicit2
+        init: id
+        rf: 1
+    sp_reluthresh:
+        source: 
+        - [hidden]
+        target: np_reluthresh
         init: id
         rf: 1
 plasticities: {}

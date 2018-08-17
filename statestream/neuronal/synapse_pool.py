@@ -284,6 +284,36 @@ class SynapsePool(object):
 
 
 
+    def eval_fnc(self, activation=None, placeholder=None):
+        """Evaluate activation function (which may be arbitrary).
+
+        Parameters
+        ----------
+        activation : string
+            Given activation function from specification.
+        placeholder : string
+            Placeholder with which '$' is to be replaced. This specifies the local variable.
+
+        Returns
+        -------
+        activation : string
+            The updated activation function that is suitable for eval(activation).
+        """
+        # First, replace all functions with the local backend.
+        for fnc in self.B._FUNCTIONS:
+            _activation = activation.replace("B." + fnc, "self.B." + fnc)
+        # Insert state variable.
+        if _activation.find('$') != -1:
+            try:
+                _activation = _activation.replace('$', placeholder)
+            except:
+                print("\nError: Unable to evaluate activation function: " + str(activation))
+        else:
+            _activation = "self.B." + _activation + "(" + placeholder + ")"
+        return _activation
+
+
+
     def compute_post_synaptic(self, as_empty=False):
         """Method computes the post synaptic response for this synapse pool
         and adds these computations to the theano computation graph.
@@ -309,7 +339,9 @@ class SynapsePool(object):
                 self.source_np_state.append([])
                 for i in range(len(self.source_np[f])):
                     if self.pact[f][i] is not "Id":
-                        self.source_np_state[f].append(eval("self.B." + self.pact[f][i])(self.source_np[f][i].state[-1]))
+                        evalact = self.eval_fnc(activation=self.pact[f][i], 
+                                                placeholder="self.source_np[f][i].state[-1]")
+                        self.source_np_state[f].append(eval(evalact))
                     else:
                         self.source_np_state[f].append(self.source_np[f][i].state[-1])
             # Determine number of features in target np.
@@ -643,21 +675,33 @@ class SynapsePool(object):
                         elif self.target_shapes[f][i] == "scalar":
                             _SCALED_CONV_SUM[f] += _SCALED_CONV[f][i].dimshuffle(0).dimshuffle(0,"x","x","x")
                 # (Add bias and) evaluate factor activation function.
+
+
+                self.source_np_state.append([])
+                for i in range(len(self.source_np[f])):
+                    if self.pact[f][i] is not "Id":
+                        evalact = self.eval_fnc(activation=self.pact[f][i], 
+                                                placeholder="self.source_np[f][i].state[-1]")
+                        self.source_np_state[f].append(eval(evalact))
+                    else:
+                        self.source_np_state[f].append(self.source_np[f][i].state[-1])
+
+
                 if self.bias_shapes[f] is None:
-                    _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f])
+                    placeholder = "_SCALED_CONV_SUM[f]"
                 else:
                     if self.bias_shapes[f] == "full":
-                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
-                                                                + self.dat["parameter"][b_name].dimshuffle("x",0,1,2))
+                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,1,2)"
                     elif self.bias_shapes[f] == "feature":
-                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
-                                                                + self.dat["parameter"][b_name].dimshuffle("x",0,"x","x"))
+                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,'x','x')"
                     elif self.bias_shapes[f] == "spatial":
-                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
-                                                                + self.dat["parameter"][b_name].dimshuffle("x","x",0,1))
+                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x','x',0,1)"
                     elif self.bias_shapes[f] == "scalar":
-                        _SCALED_CONV_SUM[f] = eval("self.B." + self.act[f])(_SCALED_CONV_SUM[f] \
-                                                                + self.dat["parameter"][b_name][0])
+                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name][0]"
+                evalact = self.eval_fnc(activation=self.act[f], 
+                                        placeholder=placeholder)
+                _SCALED_CONV_SUM[f] = eval(evalact)
+
 
             # Initialize product.
             init_with = -1
@@ -708,7 +752,9 @@ class SynapsePool(object):
 
             # activation
             if self.ACT != "Id":
-                self.post_synaptic.append(eval("self.B." + self.ACT)(scaled_conv_maxout))
+                evalact = self.eval_fnc(activation=self.ACT,
+                                        placeholder="scaled_conv_maxout")
+                self.post_synaptic.append(eval(evalact))
             else:
                 self.post_synaptic.append(scaled_conv_maxout)
 

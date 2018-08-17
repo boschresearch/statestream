@@ -195,4 +195,4 @@ interfaces:
             mnist_image: image
             mnist_label: label
             mnist_pred: pred_full
-        source_file: /opt/dl/data/mnist.pkl.gz
+        source_file: /dlc/OpenData/mnist/mnist.pkl.gz

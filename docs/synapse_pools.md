@@ -50,9 +50,9 @@ Specification parameters
 
 * **source** (type: list(list(str))): A list of lists of source neuron-pools for this synapse-pool. The length of the outer list defines the number of factors of this SP and the entries of the inner lists define the inputs (neuron-pools) for each of the factors.
 * **target** (type: str): The target neuron-pool.
-* **ACT** (type: str): An activation function for the output (= post-synaptic activation) of this SP. The default is set to 'Id'.
-* **act** (type: list(str)): An activation function for each factor. The default is set to 'Id'.
-* **pact** (type: list(list(str))): A pre-activation function for each input of the SP. This is applied before all other transformations. By default all pre-activation functions are the identity and are hence ignored.
+* **ACT** (type: str): An activation function for the output (= post-synaptic activation) of this SP. Similar to NP activation, arbitrary (combined, parameterized) functions can be specified. The default is set to 'Id'.
+* **act** (type: list(str)): An activation function for each factor. Similar to NP activation, arbitrary (combined, parameterized) functions can be specified. The default is set to 'Id'.
+* **pact** (type: list(list(str))): A pre-activation function for each input of the SP. This is applied before all other transformations. Similar to NP activation, arbitrary (combined, parameterized) functions can be specified. By default all pre-activation functions are the identity and are hence ignored.
 * **noise** (type: str): Noise added after the activation of this SP. See the [noise terms](noise_terms.md) for further details.
 * **dilation** (type: list(list(int))): Dilations for each input.
 * **rf** (type: int or list(list(int))): The receptive field size of the SP. Int is allowed only in the case of one input NP. If rf is 0 or not given then this SP is a full (a.k.a. dense) connection.

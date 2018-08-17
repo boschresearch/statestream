@@ -35,7 +35,7 @@ def import_backend(net, param, item_name):
         raise TypeError("Attempt to import non-initialized backend: " + str(item_name))
 
     if _B is None:
-        backend = net.get("backend", "theano")
+        backend = net.get("backend", "tensorflow")
 
         # Get all visible gpu devices for this network.
         try:
