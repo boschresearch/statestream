@@ -176,6 +176,9 @@ class SynapsePool(object):
         self.ACT = self.p.get("ACT", "Id")
         # Get activation functions for all factors.
         self.act = self.p.get("act", ["Id" for i in range(self.no_factors)])
+        # Get / set pre-activation function.
+        self.pact = self.p.get("pact", [["Id" for i in range(len(self.p["source"][f]))] \
+                                            for f in range(len(self.p["source"]))])
         # Get / set noise.
         self.noise = self.p.get("noise", None)
         if self.noise != None:
@@ -295,21 +298,51 @@ class SynapsePool(object):
         Returns
         -------
         """
+
         if as_empty:
             self.post_synaptic.append(None)
         else:
+
+            # Apply pre-activation
+            self.source_np_state = []
+            for f in range(len(self.source_np)):
+                self.source_np_state.append([])
+                for i in range(len(self.source_np[f])):
+                    if self.pact[f][i] is not "Id":
+                        self.source_np_state[f].append(eval("self.B." + self.pact[f][i])(self.source_np[f][i].state[-1]))
+                    else:
+                        self.source_np_state[f].append(self.source_np[f][i].state[-1])
             # Determine number of features in target np.
             tgt_shape = np_state_shape(self.net, self.p["target"])
             # Handle transformer exception.
             if "tags" in self.p:
                 if "TRANSFORMER" in self.p["tags"]:
-                    self.post_synaptic.append(self.B.warp_transform(self.source_np[0][0].state[-1], 
-                                                                    tgt_shape,
-                                                                    self.B.dimshuffle(self.source_np[1][0].state[-1][:,0,:,:], (0,'x',1,2)),
-                                                                    self.B.dimshuffle(self.source_np[1][0].state[-1][:,1,:,:], (0,'x',1,2))))
+                    src_shape = np_state_shape(self.net, self.p["source"][0][0])
+                    if len(self.source_np) == 2:
+                        trafo_shape = np_state_shape(self.net, self.p["source"][1][0])
+                        if trafo_shape[1] == 2:
+                            # Assert target shape equals transformation shape.
+                            assert(trafo_shape[2] == tgt_shape[2] and trafo_shape[3] == tgt_shape[3]), \
+                                "ERROR: Incompatible spatial dimensions between output and transformation: " + str(tgt_shape) + " vs. " + str(trafo_shape)
+                            self.post_synaptic.append(self.B.warp_transform(self.source_np_state[0][0], 
+                                                                            src_shape,
+                                                                            [tgt_shape[2], tgt_shape[3]],
+                                                                            x_pos=self.B.dimshuffle(self.source_np_state[1][0][:,0,:,:], (0,'x',1,2)),
+                                                                            y_pos=self.B.dimshuffle(self.source_np_state[1][0][:,1,:,:], (0,'x',1,2))))
+                        elif trafo_shape[1] == 6:
+                            # Assert single parameter set for spatial transformation.
+                            assert(trafo_shape[2] == 1 and trafo_shape[3] == 1), \
+                                "ERROR: Expected single parameter set for 6D spatial transformation, got: " + str(trafo_shape)
+                            self.post_synaptic.append(self.B.warp_transform(self.source_np_state[0][0], 
+                                                                            src_shape,
+                                                                            [tgt_shape[2], tgt_shape[3]],
+                                                                            theta=self.source_np_state[1][0]))
+                    elif len(self.source_np) == 3:
+                        # Assuming 2 parameters: [position map [1, X, Y], scaling factor [1, 1, 1]]
+                        pass
                     return
             # Generate graph to compute all factor outputs.
-            # _SCALED_CONV will be a 2D list of theano variables holding
+            # _SCALED_CONV will be a 2D list of variables holding
             # all target activations.
             _SCALED_CONV = []
             for f in range(self.no_factors):
@@ -325,19 +358,19 @@ class SynapsePool(object):
                         if self.P_unshare[f][i]:
                             out_state = []
                             for a in range(self.net["agents"]):
-                                in_state = self.B.unbroadcast(self.source_np[f][i].state[-1][a,:,:,:][np.newaxis,:,:,:], 0)
+                                in_state = self.B.unbroadcast(self.source_np_state[f][i][a,:,:,:][np.newaxis,:,:,:], 0)
                                 out_state.append(self.B.conv2d(in_state,
                                                                self.dat["parameter"][P_name][a,:,:,:,:],
                                                                border_mode=(0, 0),
                                                                subsample=(1, 1)))
                             ppp_state = self.B.concatenate(out_state)
                         else:
-                            ppp_state = self.B.conv2d(self.source_np[f][i].state[-1], 
+                            ppp_state = self.B.conv2d(self.source_np_state[f][i], 
                                                       self.dat["parameter"][P_name],
                                                       border_mode=(0, 0),
                                                       subsample=(1, 1))
                     else:
-                        ppp_state = self.source_np[f][i].state[-1]
+                        ppp_state = self.source_np_state[f][i]
                     # Check for unshared weights.
                     unshared_preshape = []
                     if self.W_unshare[f][i]:
