@@ -89,4 +89,5 @@ class ProcessSp(STProcess):
         for u in range(len(self.current_update["source"])):
             par = self.current_update["source"][u]
             new_value = self.shm.dat[self.name]["parameter"][par[3]] + self.current_update["value"][u]
+            # Update shared memory.
             self.shm.set_shm([self.name, "parameter", par[3]], new_value)
