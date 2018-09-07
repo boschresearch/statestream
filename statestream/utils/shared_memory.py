@@ -376,7 +376,10 @@ class SharedMemory(object):
         for T in ['parameter', 'variables']:
             for d,d_l in self.layout[client_name][T].items():
                 shm_name = client_shm_name + T + '.' + str(d)
-                SharedArray.delete(shm_name)
+                try:
+                    SharedArray.delete(shm_name)
+                except:
+                    print("\nERROR: Unable to delete non-existing shared memory: " + str(shm_name) + "\n")
 
 
     def pprint_list(self, what=""):
@@ -700,6 +703,10 @@ class SharedMemory(object):
         """Method to set a specific array in shared memory to value.
         """
         if len(which) == 2:
+            if self.layout[which[0]][which[1]].min is not None:
+                value = np.maximum(value, self.layout[which[0]][which[1]].min)
+            if self.layout[which[0]][which[1]].max is not None:
+                value = np.minimum(value, self.layout[which[0]][which[1]].max)
             shape = self.layout[which[0]][which[1]].shape
             if is_scalar_shape(shape):
                 self.dat[which[0]][which[1]][0] = value
@@ -711,6 +718,10 @@ class SharedMemory(object):
                       + str(self.dat[which[0]][which[1]].shape) \
                       + " for " + str(which))
         elif len(which) == 3:
+            if self.layout[which[0]][which[1]][which[2]].min is not None:
+                value = np.maximum(value, self.layout[which[0]][which[1]][which[2]].min)
+            if self.layout[which[0]][which[1]][which[2]].max is not None:
+                value = np.minimum(value, self.layout[which[0]][which[1]][which[2]].max)
             shape = self.layout[which[0]][which[1]][which[2]].shape
             if is_scalar_shape(shape):
                 self.dat[which[0]][which[1]][which[2]][0] = value
@@ -722,6 +733,10 @@ class SharedMemory(object):
                       + str(self.dat[which[0]][which[1]][which[2]].shape) \
                       + " for " + str(which))
         elif len(which) == 4:
+            if self.layout[which[0]][which[1]][which[2]][which[3]].min is not None:
+                value = np.maximum(value, self.layout[which[0]][which[1]][which[2]][which[3]].min)
+            if self.layout[which[0]][which[1]][which[2]][which[3]].max is not None:
+                value = np.minimum(value, self.layout[which[0]][which[1]][which[2]][which[3]].max)
             shape = self.layout[which[0]][which[1]][which[2]][which[3]].shape
             if is_scalar_shape(shape):
                 self.dat[which[0]][which[1]][which[2]][which[3]][0] = value
@@ -733,6 +748,10 @@ class SharedMemory(object):
                       + str(self.dat[which[0]][which[1]][which[2]][which[3]].shape) \
                       + " for " + str(which))
         elif len(which) == 5:
+            if self.layout[which[0]][which[1]][which[2]][which[3]][which[4]].min is not None:
+                value = np.maximum(value, self.layout[which[0]][which[1]][which[2]][which[3]][which[4]].min)
+            if self.layout[which[0]][which[1]][which[2]][which[3]][which[4]].max is not None:
+                value = np.minimum(value, self.layout[which[0]][which[1]][which[2]][which[3]][which[4]].max)
             shape = self.layout[which[0]][which[1]][which[2]][which[3]][which[4]].shape
             if is_scalar_shape(shape):
                 self.dat[which[0]][which[1]][which[2]][which[3]][which[4]][0] = value
