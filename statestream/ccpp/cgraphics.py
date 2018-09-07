@@ -95,6 +95,8 @@ def cgraphics_colorcode(source, w, h, cm, colorcorrect):
     values.
     """
     #TODO: Check for NaNs in 'source'.
+    #if True in np.isnan(source):
+    #    print("\nDETECTED NaN for variable.\n")
     return libcd.cgraphics_colorcode(np.double(source),
                                      w,
                                      h, 
