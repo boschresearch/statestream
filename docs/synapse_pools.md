@@ -57,6 +57,8 @@ Specification parameters
 * **dilation** (type: list(list(int))): Dilations for each input.
 * **rf** (type: int or list(list(int))): The receptive field size of the SP. Int is allowed only in the case of one input NP. If rf is 0 or not given then this SP is a full (a.k.a. dense) connection.
 * **weight_fnc** (type: list(list(str))): A function applied to each weight parameter (e.g. **exp**). The default is **Id** and will be ignored.
+* **min/max str** (type: float): Specifies an optional min / max bound for a specific parameter **str**. E.g. __max W_0_0: 1.0__ would implement an upper bound of 1.0 on the parameter W_0_0. By default no bounds are applied.
+* **init str** (type: str): String storing an optional initialization for a specified parameter **str**. See also the section "Provided parameter initializations" below. E.g. __init W_0_0: normal__ would initialize the parameter W_0_0 from the standard normal distribution.
 * **factor_shapes** (type: list(str)): A shape for each factor (see also [this](shapes.md)).
 * **target_shapes** (type: list(list(str))): A shape for the internal target factor (see also [this](shapes.md)).
 * **bias_shapes** (type: list(str)): A shape for each factor bias (see also [this](shapes.md)).
@@ -79,6 +81,8 @@ By default, all weight parameters are initialized with Xavier initialization [[X
 * **bilin**: Bilinear interpolation, which are for example used for upsampling.
 * **normal**: All weight parameters are independently drawn from the standard normal distribution.
 * **normal_float1_float2**: All weight parameters are independently drawn from the normal distribution with mean equal to **float1** and standard deviation equal to **float2** (e.g. **normal_-0.5_2.0**).
+* **uniform**: All weight parameters are independently drawn from the standard uniform distribution in [0,1].
+* **uniform_float1_float2**: All weight parameters are independently drawn from the uniform distribution in [**float1**, **float2**].
 
 Initializations are implemented in [meta/synapse_pools.py](../statestream/meta/synapse_pool.py).
 
