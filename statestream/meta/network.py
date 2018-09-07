@@ -604,7 +604,10 @@ class MetaNetwork(object):
         self.np_shape = {}
         for n,N in self.net["neuron_pools"].items():
             # update number of neurons
-            self.no_neurons += np.prod(N["shape"])
+            try:
+                self.no_neurons += np.prod(N["shape"])
+            except:
+                print ("\nERROR: Unable to resolve shape: " + str(N["shape"]) + " of np " + str(n) + ".\n")
             # update number of processes
             np_is_produced = False
             for p,P in self.net["interfaces"].items():
