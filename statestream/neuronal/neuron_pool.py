@@ -79,6 +79,8 @@ class NeuronPool(object):
 
         # Get np dictionary.
         self.p = self.net["neuron_pools"][self.name]
+        # Get binary flag.
+        self.binary = self.p.get("binary", False)
         # Get shape of neuron pool.
         self.shape = np_state_shape(self.net, self.name)
         # Get random seed.
@@ -100,7 +102,7 @@ class NeuronPool(object):
         self.noise = self.p.get("noise", None)
         if self.noise is not None:
             self.noise_dist = self.B.randomstream(np.random.RandomState(42).randint(99999), self.noise)
-        # Get np dropout.
+        # Get np dropout (stochastic activation).
         self.dropout = self.p.get("dropout", None)
         if self.dropout is not None:
             # Random stream for dropout.
@@ -167,10 +169,16 @@ class NeuronPool(object):
                 if len(self.sources) == 0:
                     self.state_SUM.append(0 * self.state[-1])
                 else:
-                    # Sum post synaptic activations.
-                    self.state_SUM.append(self.sources[0].post_synaptic[-1])
-                    for sp in range(len(self.sources) - 1):
-                        self.state_SUM[-1] += self.sources[sp+1].post_synaptic[-1]
+                    if self.binary:
+                        # Sum post synaptic activations as OR over Bernoulli dists.
+                        self.state_SUM.append(self.sources[0].post_synaptic[-1])
+                        for sp in range(len(self.sources) - 1):
+                            self.state_SUM[-1] += self.sources[sp + 1].post_synaptic[-1] * (1.0 - self.state_SUM[-1])
+                    else:
+                        # Sum post synaptic activations.
+                        self.state_SUM.append(self.sources[0].post_synaptic[-1])
+                        for sp in range(len(self.sources) - 1):
+                            self.state_SUM[-1] += self.sources[sp + 1].post_synaptic[-1]
                 # Add noise.
                 if self.noise == "normal":
                     self.state_SUM[-1] += self.dat["parameter"]["noise_mean"] \
@@ -337,9 +345,10 @@ class NeuronPool(object):
                         activation = self.activation.replace('$', 'self.state_AB[-1]')
                         self.state_AB[-1] = eval(activation)
                     except:
-                        print("\nError: Unable to evaluate activation function: " + str(self.activation))
+                        print("\nError: Unable to evaluate activation function: " + str(self.activation) + ". Missing B. before function or unknown function?")
                 else:
                     self.state_AB[-1] = eval("self.B." + self.activation)(self.state_AB[-1])
+
 
                 # Sparcify state no activation. (Theano version dependent)
                 # if self.sparsify == 0:

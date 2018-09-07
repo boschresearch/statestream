@@ -122,6 +122,8 @@ class SynapsePool(object):
         # Get sources / targets.
         self.source_np = source_nps
         self.target_np = target_np
+        # Get binary flag.
+        self.binary = self.net["neuron_pools"][self.p["target"]].get("binary", False)
         # Get local representation of shared memory.
         self.dat_layout = sp_shm_layout(self.name, self.net, self.param)
         self.dat = {}
@@ -373,15 +375,57 @@ class SynapsePool(object):
                                                                             [tgt_shape[2], tgt_shape[3]],
                                                                             theta=self.source_np_state[1][0]))
                     elif len(self.source_np) == 3:
-                        # Assuming 2 parameters: [position map [1, X, Y], scaling factor [1, 1, 1]]
-                        pass
+                        # SRC[0]: 2D global position in canvas coordinates.
+                        # SRC[1]: position map for relative update of global position
+                        # SRC[2]: reference frame for relative position
+                        trafo_map_shape = np_state_shape(self.net, self.p["source"][1][0])
+                        reference_shape = np_state_shape(self.net, self.p["source"][2][0])
+                        # Assume a 1-d relative pose map in source[1] and a global 2d pose in source[0].
+                        assert(trafo_map_shape[1] == 1), \
+                            "ERROR: Expected relative pose map in source[1], got: " + str(trafo_map_shape)
+                        assert(src_shape[1] == 2), \
+                            "ERROR: Expected 2d position in source[0], got: " + str(src_shape)
+                        self.post_synaptic.append(self.B.warp_transform(self.source_np_state[0][0], 
+                                                                        trafo_map_shape,
+                                                                        reference_shape,
+                                                                        relposmap=self.source_np_state[1][0]))
+                    elif len(self.source_np) == 5:
+                        # Assuming 2 parameters: [position map [1, X, Y], scaling factor [1, 1, 1]].
+                        # Assert second transformation is scalar.
+                        # SRC[0]: source canvas from which to extract
+                        # SRC[1]: relative position map for global focus position update
+                        # SRC[2]: reference frame for relative posiion
+                        # SRC[3]: scaling of extracted window
+                        # SRC[4]: global pose in canvas pixel coordinates
+                        trafo_map_shape = np_state_shape(self.net, self.p["source"][1][0])
+                        trafo_ref_shape = np_state_shape(self.net, self.p["source"][2][0])
+                        trafo_scale_shape = np_state_shape(self.net, self.p["source"][3][0])
+                        trafo_pos_shape = np_state_shape(self.net, self.p["source"][4][0])
+                        # Assert first transformation is a 1-channel map.
+                        assert(trafo_map_shape[1] == 1), \
+                            "ERROR: Expected 1-channel map for spatial target position update, got: " + str(trafo_map_shape)
+                        # Assert second transformation is scalar.
+                        assert(trafo_scale_shape[1] == 1 and trafo_scale_shape[2] == 1 and trafo_scale_shape[3] == 1), \
+                            "ERROR: Expected scalar scaling parameters for spatial transformer, got: " + str(trafo_scale_shape)
+                        # Assert third transformation is a 2D current global target position.
+                        assert(trafo_pos_shape[1] == 2 and trafo_pos_shape[2] == 1 and trafo_pos_shape[3] == 1), \
+                            "ERROR: Expected single 2D target position, got: " + str(trafo_pos_shape)
+                        self.post_synaptic.append(self.B.warp_transform(self.source_np_state[0][0], 
+                                                                        None,
+                                                                        [tgt_shape[2], tgt_shape[3]],
+                                                                        relposmap=self.source_np_state[1][0],
+                                                                        refshape=trafo_ref_shape,
+                                                                        scaling=self.source_np_state[3][0],
+                                                                        globalpos=self.source_np_state[4][0]))
                     return
             # Generate graph to compute all factor outputs.
             # _SCALED_CONV will be a 2D list of variables holding
             # all target activations.
             _SCALED_CONV = []
+            _SCALED_CONV_VAR = []
             for f in range(self.no_factors):
                 _SCALED_CONV.append([])
+                _SCALED_CONV_VAR.append([])
                 for i in range(len(self.p["source"][f])):
                     src_shape = np_state_shape(self.net, self.p["source"][f][i])
                     W_name = "W_" + str(f) + "_" + str(i)
@@ -530,6 +574,13 @@ class SynapsePool(object):
                                                                       weights,
                                                                       border_mode=(0, 0),
                                                                       subsample=(1, 1)))
+                                # Binary.
+                                if self.binary:
+                                    _SCALED_CONV_VAR[-1].append(_SCALED_CONV[-1][-1])
+                                    _SCALED_CONV_VAR[-1][-1] -= self.B.conv2d(ppp_state**2, 
+                                                                              weights**2,
+                                                                              border_mode=(0, 0),
+                                                                              subsample=(1, 1))
                             
                     # 2D convolution.
                     else:
@@ -552,6 +603,15 @@ class SynapsePool(object):
                                                                           border_mode="half",
                                                                           subsample=(self.pooling[f][i], self.pooling[f][i]),
                                                                           filter_dilation=(self.dilation[f][i], self.dilation[f][i])))
+                                    # Binary.
+                                    if self.binary:
+                                        _SCALED_CONV_VAR[-1].append(_SCALED_CONV[-1][-1])
+                                        _SCALED_CONV_VAR[-1][-1] -= self.B.conv2d(ppp_state**2, 
+                                                                                  weights**2,
+                                                                                  border_mode="half",
+                                                                                  subsample=(self.pooling[f][i], self.pooling[f][i]),
+                                                                                  filter_dilation=(self.dilation[f][i], self.dilation[f][i]))
+
                             else:
                                 if self.W_unshare[f][i]:
                                     out_state = []
@@ -567,6 +627,14 @@ class SynapsePool(object):
                                                                           weights,
                                                                           border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
                                                                           subsample=(self.pooling[f][i], self.pooling[f][i])))
+                                    # Binary.
+                                    if self.binary:
+                                        _SCALED_CONV_VAR[-1].append(_SCALED_CONV[-1][-1])
+                                        _SCALED_CONV_VAR[-1][-1] -= self.B.conv2d(ppp_state**2, 
+                                                                                  weights**2,
+                                                                                  border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
+                                                                                  subsample=(self.pooling[f][i], self.pooling[f][i]))
+
                         elif self.pooling[f][i] <= -1:
                             # 2D upsampling.
                             upsampled = self.B.repeat(self.B.repeat(ppp_state,
@@ -591,6 +659,15 @@ class SynapsePool(object):
                                                                           border_mode="half",
                                                                           subsample=(1, 1),
                                                                           filter_dilation=(self.dilation[f][i], self.dilation[f][i])))
+                                    # Binary.
+                                    if self.binary:
+                                        _SCALED_CONV_VAR[-1].append(_SCALED_CONV[-1][-1])
+                                        _SCALED_CONV_VAR[-1][-1] -= self.B.conv2d(upsampled**2, 
+                                                                                  weights**2,
+                                                                                  border_mode="half",
+                                                                                  subsample=(1, 1),
+                                                                                  filter_dilation=(self.dilation[f][i], self.dilation[f][i]))
+
                             else:
                                 if self.W_unshare[f][i]:
                                     out_state = []
@@ -607,6 +684,14 @@ class SynapsePool(object):
                                                                           weights,
                                                                           border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
                                                                           subsample=(1, 1)))
+                                    # Binary.
+                                    if self.binary:
+                                        _SCALED_CONV_VAR[-1].append(_SCALED_CONV[-1][-1])
+                                        _SCALED_CONV_VAR[-1][-1] -= self.B.conv2d(upsampled**2, 
+                                                                                  weights**2,
+                                                                                  border_mode=(self.pad[f][i][0], self.pad[f][i][1]),
+                                                                                  subsample=(1, 1))
+
                         else:
                             # Fully connected (pooling = 0).
                             if self.W_unshare[f][i]:
@@ -624,9 +709,17 @@ class SynapsePool(object):
                                                                       weights,
                                                                       border_mode=(0, 0),
                                                                       subsample=(1, 1)))
+                                # Binary.
+                                if self.binary:
+                                    _SCALED_CONV_VAR[-1].append(_SCALED_CONV[-1][-1])
+                                    _SCALED_CONV_VAR[-1][-1] -= self.B.conv2d(ppp_state**2, 
+                                                                              weights**2,
+                                                                              border_mode=(0, 0),
+                                                                              subsample=(1, 1))
 
             # Sum over inputs to factors (targets).
             _SCALED_CONV_SUM = []
+            _SCALED_CONV_VAR_SUM = []
             for f in range(self.no_factors):
                 if self.bias_shapes[f] is not None:
                     b_name = "b_" + str(f)
@@ -638,6 +731,8 @@ class SynapsePool(object):
                     for i in range(len(self.p["source"][f])):
                         if self.factor_shapes[f] == self.target_shapes[f][i]:
                             _SCALED_CONV_SUM.append(_SCALED_CONV[f][i])
+                            if self.binary:
+                                _SCALED_CONV_VAR_SUM.append(_SCALED_CONV_VAR[f][i])
                             init_with = i
                             sum_init = True
                             break
@@ -665,12 +760,16 @@ class SynapsePool(object):
                     zeros_state = self.B.zeros(shape, dtype=np.float32)
                     # Initialize factor with zero of correct shape.
                     _SCALED_CONV_SUM.append(zeros_state)
+                    if self.binary:
+                        _SCALED_CONV_VAR_SUM.append(zeros_state)
                 # Sum up all inputs for factor f (except for the
                 # potentially used for initialization).
                 for i in range(len(self.p["source"][f])):
                     if init_with != i:
                         if self.target_shapes[f][i] == "full":
                             _SCALED_CONV_SUM[f] += _SCALED_CONV[f][i]
+                            if self.binary:
+                                _SCALED_CONV_VAR_SUM[f] += _SCALED_CONV_VAR[f][i]
                         elif self.target_shapes[f][i] == "feature":
                             _SCALED_CONV_SUM[f] += _SCALED_CONV[f][i].dimshuffle(0,1).dimshuffle(0,1,"x","x")
                         elif self.target_shapes[f][i] == "spatial":
@@ -689,21 +788,31 @@ class SynapsePool(object):
                     else:
                         self.source_np_state[f].append(self.source_np[f][i].state[-1])
 
-
-                if self.bias_shapes[f] is None:
-                    placeholder = "_SCALED_CONV_SUM[f]"
+                if self.binary:
+                    # For binary we transform the normal distributions now
+                    # (before the product) into bernoullies again considering the factor-wise
+                    # biases.
+                    # Afterwards the product is again a bernoulli.
+                    if self.bias_shapes[f] is not None:
+                        _SCALED_CONV_SUM[f] -= self.dat['parameter'][b_name].dimshuffle('x',0,'x','x')
+                    _SCALED_CONV_SUM[f] /= self.B.sqrt(_SCALED_CONV_VAR_SUM[f] + 1e-16)
+                    _SCALED_CONV_SUM[f] = self.B.erf(_SCALED_CONV_SUM[f] / np.sqrt(2.0))
                 else:
-                    if self.bias_shapes[f] == "full":
-                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,1,2)"
-                    elif self.bias_shapes[f] == "feature":
-                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,'x','x')"
-                    elif self.bias_shapes[f] == "spatial":
-                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x','x',0,1)"
-                    elif self.bias_shapes[f] == "scalar":
-                        placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name][0]"
-                evalact = self.eval_fnc(activation=self.act[f], 
-                                        placeholder=placeholder)
-                _SCALED_CONV_SUM[f] = eval(evalact)
+                    if self.bias_shapes[f] is None:
+                        placeholder = "_SCALED_CONV_SUM[f]"
+                    else:
+                        if self.bias_shapes[f] == "full":
+                            placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,1,2)"
+                        elif self.bias_shapes[f] == "feature":
+                            placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,'x','x')"
+                        elif self.bias_shapes[f] == "spatial":
+                            placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x','x',0,1)"
+                        elif self.bias_shapes[f] == "scalar":
+                            placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name][0]"
+                    evalact = self.eval_fnc(activation=self.act[f], 
+                                            placeholder=placeholder)
+                    _SCALED_CONV_SUM[f] = eval(evalact)
+
 
 
             # Initialize product.
@@ -753,7 +862,7 @@ class SynapsePool(object):
                     else:
                         scaled_conv_maxout = self.B.maximum(scaled_conv_maxout, t)
 
-            # activation
+            # Apply sp activation.
             if self.ACT != "Id":
                 evalact = self.eval_fnc(activation=self.ACT,
                                         placeholder="scaled_conv_maxout")
