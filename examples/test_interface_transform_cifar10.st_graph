@@ -19,7 +19,7 @@
 
 name: test_transform_cifar10
 agents: 8
-backend: theano
+backend: tensorflow
 neuron_pools:
     tcf10_image:
         shape: [3, 32, 32]
@@ -27,11 +27,16 @@ neuron_pools:
     tcf10_transform:
         shape: [2, 32, 32]
         tags: [sensor]
+    tcf10_crop:
+        shape: [2, 16, 16]
+        tags: [sensor]
     cp:
         shape: [3, 32, 32]
         tags: [sensor]
     img_transformed:
         shape: [3, 32, 32]
+    img_cropped:
+        shape: [3, 16, 16]
 synapse_pools:
     img_cp: 
         source: [[tcf10_image]]
@@ -42,10 +47,14 @@ synapse_pools:
         source: [[tcf10_image], [tcf10_transform]]
         target: img_transformed
         tags: [TRANSFORMER]
+    sp_crop:
+        source: [[tcf10_image], [tcf10_crop]]
+        target: img_cropped
+        tags: [TRANSFORMER]
 plasticities: {}
 interfaces:
     tcifar10:
         type: transform_cifar10
         in: []
-        out: [tcf10_image, tcf10_transform]
-        source_path: /opt/dl/data/cifar10/cifar-10-batches-py/
+        out: [tcf10_image, tcf10_transform, tcf10_crop]
+        source_path: /dlc/OpenData/cifar/cifar-10-batches-py/
