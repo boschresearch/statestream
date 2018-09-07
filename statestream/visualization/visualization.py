@@ -91,7 +91,10 @@ def draw_dashed_line(surf, col, start_pt, end_pt, width=1, dash=10, offset=0.0, 
     """
     diff = end_pt - start_pt
     length = np.linalg.norm(diff)
-    slope = diff / length
+    try:
+        slope = diff / length
+    except:
+        slope = 0.0
     if dash_type == 0:
         for i in range(0, int(length / dash) - 1, 2):
             start_i = start_pt + ((i + offset) * dash) * slope
@@ -4700,3 +4703,4 @@ class Visualization(object):
             self.screen.blit(self.fonts['small'].render(str(SW['dat_shape']), 1, self.cc(self.vparam['text_color'])), 
                              (parent_pos[0] + SW['pos'][0], 
                               parent_pos[1] + SW['pos'][1] - 26))
+
