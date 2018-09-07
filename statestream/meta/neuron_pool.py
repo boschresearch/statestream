@@ -205,18 +205,18 @@ def np_shm_layout(name, net, param):
             shm_layout["parameter"]["noise_mean"] \
                 = ShmL("backend", (), dtype, 0.0)
             shm_layout["parameter"]["noise_std"] \
-                = ShmL("backend", (), dtype, 1.0, 0.0, None)
+                = ShmL("backend", (), dtype, 1.0, minimum=1e-16, maximum=None)
         elif p["noise"] == "uniform":
             shm_layout["parameter"]["noise_min"] = ShmL("backend", (), dtype, -1.0)
             shm_layout["parameter"]["noise_max"] = ShmL("backend", (), dtype, 1.0)
     # Check for dropout.
     if "dropout" in p:
         shm_layout["parameter"]["dropout"] \
-            = ShmL("backend", (), dtype, 1e-5, 0.0, 1.0)
+            = ShmL("backend", (), dtype, 1e-5, minimum=0.0, maximum=1.0)
     # Check for zoneout.
     if "zoneout" in p:
         shm_layout["parameter"]["zoneout"] \
-            = ShmL("backend", (), dtype, 1e-5, 0.0, 1.0)
+            = ShmL("backend", (), dtype, 1e-5, minimum=0.0, maximum=1.0)
 
     # Add layout for variables.
     # -------------------------------------------------------------------------

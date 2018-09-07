@@ -66,10 +66,10 @@ def plast_shm_layout(name, net, param):
     # -------------------------------------------------------------------------
     if "confidence_penalty" in p:
         shm_layout["parameter"]["confidence_penalty"] \
-            = ShmL("backend", (), dtype, 0.0, 0.0, None)
+            = ShmL("backend", (), dtype, 0.0, minimum=0.0, maximum=None)
     if "label_smoothing" in p:
         shm_layout["parameter"]["label_smoothing"] \
-            = ShmL("backend", (), dtype, 0.0, 0.0, None)
+            = ShmL("backend", (), dtype, 0.0, minimum=0.0, maximum=None)
 
     # The (splitted) loss of the loss-plasticity.
     shm_layout["variables"]["loss0"] = ShmL("backend", (), dtype, 0.0)

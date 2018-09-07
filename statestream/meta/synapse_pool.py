@@ -90,7 +90,7 @@ def sp_shm_layout(name, net, param):
             shm_layout["parameter"]["noise_mean"] \
                 = ShmL("backend", (), dtype, 0.0)
             shm_layout["parameter"]["noise_std"] \
-                = ShmL("backend", (), dtype, 1.0, 0.0, None)
+                = ShmL("backend", (), dtype, 1.0, minimum=0.0, maximum=None)
         elif p["noise"] == "uniform":
             shm_layout["parameter"]["noise_min"] = ShmL("backend", (), dtype, 0.0)
             shm_layout["parameter"]["noise_max"] = ShmL("backend", (), dtype, 0.0)
@@ -156,6 +156,11 @@ def sp_shm_layout(name, net, param):
             unshared = False
             W_preshape = []
             P_preshape = []
+            # Getset min / max for parameters.
+            min_W = p.get("min " + W_name, None)
+            max_W = p.get("max " + W_name, None)
+            min_P = p.get("min " + P_name, None)
+            max_P = p.get("max " + P_name, None)
             # Check for unshared sp parameters.
             if "unshare" in p:
                 if W_name in p["unshare"]:
@@ -206,7 +211,9 @@ def sp_shm_layout(name, net, param):
                            1,
                            1],
                            dtype,
-                           "xavier")
+                           "xavier",
+                           minimum=min_P,
+                           maximum=max_P)
             # Finally set shape of W_f_i.
             if weight_shapes[f][i] == "full":
                 shm_layout["parameter"][W_name] \
@@ -216,7 +223,9 @@ def sp_shm_layout(name, net, param):
                             rf_size_x, 
                             rf_size_y], 
                            dtype, 
-                           "xavier")
+                           "xavier",
+                           minimum=min_W,
+                           maximum=max_W)
             elif weight_shapes[f][i] == "spatial":
                 shm_layout["parameter"][W_name] \
                     = ShmL("backend", 
@@ -226,6 +235,8 @@ def sp_shm_layout(name, net, param):
                             rf_size_y], 
                            dtype, 
                            "xavier",
+                           minimum=min_W,
+                           maximum=max_W,
                            broadcastable=[True, True, False, False])
             elif weight_shapes[f][i] == "feature":
                 shm_layout["parameter"][W_name] \
@@ -236,6 +247,8 @@ def sp_shm_layout(name, net, param):
                             1], 
                            dtype, 
                            "xavier",
+                           minimum=min_W,
+                           maximum=max_W,
                            broadcastable=[False, False, True, True])
             elif weight_shapes[f][i] == "src_feature":
                 shm_layout["parameter"][W_name] \
@@ -246,6 +259,8 @@ def sp_shm_layout(name, net, param):
                             1], 
                            dtype, 
                            "xavier",
+                           minimum=min_W,
+                           maximum=max_W,
                            broadcastable=[True, False, True, True])
             elif weight_shapes[f][i] == "tgt_feature":
                 shm_layout["parameter"][W_name] \
@@ -256,6 +271,8 @@ def sp_shm_layout(name, net, param):
                             1], 
                            dtype, 
                            "xavier",
+                           minimum=min_W,
+                           maximum=max_W,
                            broadcastable=[False, True, True, True])
             elif weight_shapes[f][i] == "src_spatial":
                 shm_layout["parameter"][W_name] \
@@ -266,6 +283,8 @@ def sp_shm_layout(name, net, param):
                             rf_size_y], 
                            dtype, 
                            "xavier",
+                           minimum=min_W,
+                           maximum=max_W,
                            broadcastable=[True, False, False, False])
             elif weight_shapes[f][i] == "tgt_spatial":
                 shm_layout["parameter"][W_name] \
@@ -276,6 +295,8 @@ def sp_shm_layout(name, net, param):
                             rf_size_y], 
                            dtype, 
                            "xavier",
+                           minimum=min_W,
+                           maximum=max_W,
                            broadcastable=[False, True, False, False])
             elif weight_shapes[f][i] == "scalar":
                 shm_layout["parameter"][W_name] \
@@ -286,6 +307,8 @@ def sp_shm_layout(name, net, param):
                             1], 
                            dtype, 
                            "xavier",
+                           minimum=min_W,
+                           maximum=max_W,
                            broadcastable=[False, False, False, False])
 
         # For each factor add a bias parameter.
@@ -478,6 +501,16 @@ def sp_init(net, name, dat_name, dat_layout, mode=None):
                     dat_value = np.random.normal(loc=mu, 
                                                  scale=std, 
                                                  size=dat_layout.shape).astype(dat_layout.dtype)
+                elif init_as == "uniform":
+                    dat_value = np.random.uniform(low=0.0, 
+                                                 high=1.0, 
+                                                 size=dat_layout.shape).astype(dat_layout.dtype)
+                elif init_as.startswith("uniform_"):
+                    min_val = float(init_as.split("_")[1])
+                    max_val = float(init_as.split("_")[2])
+                    dat_value = np.random.uniform(low=min_val, 
+                                                  high=max_val, 
+                                                  size=dat_layout.shape).astype(dat_layout.dtype)
                 elif init_as == "bilin":
                     dat_value = np.zeros(dat_layout.shape, dtype=dat_layout.dtype)
                     # Assert source features equal target features.
