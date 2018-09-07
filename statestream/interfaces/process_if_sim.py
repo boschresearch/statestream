@@ -107,7 +107,7 @@ def if_shm_layout(name, net, param):
     # -------------------------------------------------------------------------
     # Add mode parameter.
     shm_layout["parameter"]["mode"] \
-        = ShmL("np", (), np.int32, p.get("mode", 0), 1, None)
+        = ShmL("np", (), np.int32, p.get("mode", 0))
 
     # Add variables.
     # -------------------------------------------------------------------------

@@ -45,7 +45,7 @@ def if_interfaces():
         The unique string name of this interface.
     """
     # Specify sub-interfaces.
-    return {"out": ["tcf10_image", "tcf10_trafo"], 
+    return {"out": ["tcf10_image", "tcf10_trafo", "tcf10_crop", "tcf10_relposmap"], 
             "in": []
            }
 
@@ -98,7 +98,7 @@ def if_shm_layout(name, net, param):
     # -------------------------------------------------------------------------
     # Add mode parameter.
     shm_layout["parameter"]["mode"] \
-        = ShmL("np", (), np.int32, p.get("mode", 0), 1, None)
+        = ShmL("np", (), np.int32, p.get("mode", 0))
     # Add durations as numpy parameters.
     shm_layout["parameter"]["min_duration"] = ShmL("np", (), np.int32, 12, 1, None)
     shm_layout["parameter"]["max_duration"] = ShmL("np", (), np.int32, 16, 1, None)
@@ -249,6 +249,16 @@ class ProcessIf_transform_cifar10(ProcessIf):
 
         self.transforms = ['trans', 'scale', 'rot', 'random']
 
+        self.output_shape = {}
+        for o in self.p["out"]:
+            tmp_target = o
+            # Consider remapping.
+            if "remap" in self.p:
+                if o in p["remap"]:
+                    tmp_target = self.p["remap"][o]
+            self.output_shape[o] = self.net["neuron_pools"][tmp_target]["shape"]
+
+
         # Initialize experimental state for all agents.
         # ---------------------------------------------------------------------
         self.current_duration = []
@@ -269,6 +279,11 @@ class ProcessIf_transform_cifar10(ProcessIf):
             self.mode_shuffle[t] = np.random.permutation(self.samples[t])
             self.mode_current[t] = 0
 
+        if "tcf10_relposmap" in self.p["out"]:
+            self.current_relposmap = np.zeros([self.output_shape["tcf10_relposmap"][1], \
+                                               self.output_shape["tcf10_relposmap"][2]], \
+                                              dtype=np.float32)
+            self.current_time = 0.0
 
 
     def draw_new_sample(self, a):
@@ -328,6 +343,19 @@ class ProcessIf_transform_cifar10(ProcessIf):
     def update_frame_writeout(self):
         """Method to update the experimental state of the cifar10 interface.
         """
+        if "tcf10_relposmap" in self.p["out"]:
+            # Update relposmap.
+            self.current_relposmap *= 0
+            p0 = (-2.0, 4.0)
+            p1 = (2.0, -4.0)
+            # Compute index.
+            self.current_time += 0.1
+            f = (np.cos(self.current_time) + 1.0) / 2.0
+            x = np.int32(f * p0[0] + (1.0 - f) * p1[0]) + self.current_relposmap.shape[0] // 2
+            y = np.int32(f * p0[1] + (1.0 - f) * p1[1]) + self.current_relposmap.shape[1] // 2
+            self.current_relposmap[x - 1:x + 1,y - 1:y + 1] = 0.5
+            self.current_relposmap[x,y] = 1.0
+
         # Update sampling mode.
         if self.mode != self.dat["parameter"]["mode"]:
             self.mode = self.dat["parameter"]["mode"]
@@ -376,30 +404,37 @@ class ProcessIf_transform_cifar10(ProcessIf):
                 self.dat["variables"]["tcf10_image"][a,:,:,:] = ff * self.current_image[a]
             if "tcf10_transform" in self.p["out"]:
                 if self.transforms[self.current_transform[a]] == "trans":
-                    self.dat["variables"]["tcf10_transform"][a,0,:,:] = 0.1
-                    self.dat["variables"]["tcf10_transform"][a,1,:,:] = 0.05
-                elif self.transforms[self.current_transform[a]] == "scale":
-                    center = np.array([self.image_shape[1] / 2.0, 
-                                       self.image_shape[2] / 2.0], dtype=np.float32)
                     for dx in range(self.image_shape[1]):
                         for dy in range(self.image_shape[2]):
-                            v = np.array([center[0] - float(dx), center[1] - float(dy)], dtype=np.float32)
-                            v[0] = - v[0] / self.image_shape[1]
-                            v[1] = - v[1] / self.image_shape[2]
+                            self.dat["variables"]["tcf10_transform"][a,0,dx,dy] = 0.1 + dx / self.image_shape[1]
+                            self.dat["variables"]["tcf10_transform"][a,1,dx,dy] = 0.05 + dy / self.image_shape[2]
+                elif self.transforms[self.current_transform[a]] == "scale":
+                    for dx in range(self.image_shape[1]):
+                        for dy in range(self.image_shape[2]):
                             self.dat["variables"]["tcf10_transform"][a,0,dx,dy] \
-                                = 0.3 * v[1]
+                                = 0.5 - 0.15 + 0.3 * float(dx / self.image_shape[1])
                             self.dat["variables"]["tcf10_transform"][a,1,dx,dy] \
-                                = 0.3 * v[0]
+                                = 0.5 - 0.15 + 0.3 * float(dy / self.image_shape[2])
                 elif self.transforms[self.current_transform[a]] == "rot":
                     self.dat["variables"]["tcf10_transform"][a,0,:,:] = 0.2
                     self.dat["variables"]["tcf10_transform"][a,1,:,:] = 0.2
                 elif self.transforms[self.current_transform[a]] == "random":
                     for dx in range(self.image_shape[1]):
                         for dy in range(self.image_shape[2]):
-                            v = 0.1 * (np.random.rand(2) - 0.5)
-                            self.dat["variables"]["tcf10_transform"][a,0,dx,dy] \
-                                = v[0]
-                            self.dat["variables"]["tcf10_transform"][a,1,dx,dy] \
-                                = v[1]
+                            self.dat["variables"]["tcf10_transform"][a,0,dx,dy] = \
+                                0.1 * (np.random.rand() - 0.5) + dx / self.image_shape[1]
+                            self.dat["variables"]["tcf10_transform"][a,1,dx,dy] = \
+                                0.1 * (np.random.rand() - 0.5) + dy / self.image_shape[2]
+            if "tcf10_crop" in self.p["out"]:
+                dim = 16
+                for dx in range(dim):
+                    for dy in range(dim):
+                        self.dat["variables"]["tcf10_crop"][a,0,dx,dy] = dx / self.image_shape[1]
+                        self.dat["variables"]["tcf10_crop"][a,1,dx,dy] = dy / self.image_shape[2]
+            if "tcf10_relposmap" in self.p["out"]:
+                self.dat["variables"]["tcf10_relposmap"][a,0,:,:] = self.current_relposmap[:]
+
+
+
 
 

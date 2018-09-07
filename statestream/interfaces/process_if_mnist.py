@@ -99,14 +99,14 @@ def if_shm_layout(name, net, param):
     # -------------------------------------------------------------------------
     # Add mode parameter.
     shm_layout["parameter"]["mode"] \
-        = ShmL("np", (), np.int32, p.get("mode", 0), 1, None)
+        = ShmL("np", (), np.int32, p.get("mode", 0))
     # Add durations as numpy parameters.
     shm_layout["parameter"]["min_duration"] \
         = ShmL("np", (), np.int32, p.get("min_duration", 16), 1, None)
     shm_layout["parameter"]["max_duration"] \
         = ShmL("np", (), np.int32, p.get("max_duration", 24), 1, None)
     shm_layout["parameter"]["fading"] \
-        = ShmL("np", (), np.int32, p.get("fading", 4), 1, None)
+        = ShmL("np", (), np.int32, p.get("fading", 4), 0, None)
 
 
     # Add variables.

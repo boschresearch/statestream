@@ -96,7 +96,7 @@ def if_shm_layout(name, net, param):
     # -------------------------------------------------------------------------
     # Add mode parameter.
     shm_layout["parameter"]["mode"] \
-        = ShmL("np", (), np.int32, p.get("mode", 0), 1, None)
+        = ShmL("np", (), np.int32, p.get("mode", 0))
     # Add durations as numpy parameters.
     shm_layout["parameter"]["minmax_velocity"] \
         = ShmL("np", (), np.float32, p.get("minmax_velocity", 1), 1, None)
