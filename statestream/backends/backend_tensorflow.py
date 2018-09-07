@@ -66,6 +66,7 @@ _FUNCTIONS = ["variable",
               "Id",
               "sqrt",
               "tanh",
+              "erf",
               "relu",
               "selu",
               "spiky",
@@ -204,30 +205,30 @@ def cast(x, dtype):
     return tf.cast(x, dtype)
 
 def min(x, axis=None, keepdims=False):
-    return tf.reduce_min(x, axis=axis, keep_dims=keepdims)
+    return tf.reduce_min(x, axis=axis, keepdims=keepdims)
 
 def max(x, axis=None, keepdims=False):
-    return tf.reduce_max(x, axis=axis, keep_dims=keepdims)
+    return tf.reduce_max(x, axis=axis, keepdims=keepdims)
 
 def sum(x, axis=None, keepdims=False):
-    return tf.reduce_sum(x, axis=axis, keep_dims=keepdims)
+    return tf.reduce_sum(x, axis=axis, keepdims=keepdims)
 
 def prod(x, axis=None, keepdims=False):
-    return tf.reduce_prod(x, axis=axis, keep_dims=keepdims)
+    return tf.reduce_prod(x, axis=axis, keepdims=keepdims)
 
 def mean(x, axis=None, keepdims=False):
-    return tf.reduce_mean(x, axis=axis, keep_dims=keepdims)
+    return tf.reduce_mean(x, axis=axis, keepdims=keepdims)
 
 def std(x, axis=None, keepdims=False):
     return tf.sqrt(var(x, axis=axis, keepdims=keepdims))
 
 def var(x, axis=None, keepdims=False):
-    m = tf.reduce_mean(x, axis=axis, keep_dims=True)
+    m = tf.reduce_mean(x, axis=axis, keepdims=True)
     v = tf.square(x - m)
-    return tf.reduce_mean(v, axis=axis, keep_dims=keepdims)
+    return tf.reduce_mean(v, axis=axis, keepdims=keepdims)
 
 def any(x, axis=None, keepdims=False):
-    return tf.reduce_any(x, axis=axis, keep_dims=keepdims)
+    return tf.reduce_any(x, axis=axis, keepdims=keepdims)
 
 def argmin(x, axis=-1, keepdims=False):
     return tf.argmin(x, axis=axis)
@@ -258,6 +259,11 @@ def tanh(x):
     """Tangenshyperbolicus: a(x) = tanh(x)
     """
     return tf.nn.tanh(x)
+
+def erf(x):
+    """Error function.
+    """
+    return tf.erf(x)
 
 def relu(x, thresh=0.0):
     """ReLU function: a(x) = max(x, 0)
@@ -517,7 +523,7 @@ def maximize(x):
 
 
 
-def warp_transform(conv_input, input_shape, output_shape, **kwargs):
+def warp_transform(conv_input, input_shape=None, output_shape=None, **kwargs):
     """Transforms features of conv_input using x_offset, y_offset.
 
     Parameter:
@@ -549,12 +555,13 @@ def warp_transform(conv_input, input_shape, output_shape, **kwargs):
 
     [2] https://github.com/skaae/transformer_network
     """
-    batch_size = input_shape[0]
-    channels = input_shape[1]
-    height = input_shape[2]
-    width = input_shape[3]
-    output_height = output_shape[0]
-    output_width = output_shape[1]
+    if input_shape is not None:
+        batch_size = input_shape[0]
+        channels = input_shape[1]
+        height = input_shape[2]
+        width = input_shape[3]
+
+
 
     # Compute coordinates.
 #    x = flatgrid_x + flatten(x_offset) * width
@@ -565,8 +572,8 @@ def warp_transform(conv_input, input_shape, output_shape, **kwargs):
         y = flatten(kwargs["y_pos"]) * height
     elif "theta" in kwargs:
         # Generate grid.
-        grid_x, grid_y = np.meshgrid(np.linspace(0.0, output_width - 1.0, output_width),
-                           np.linspace(0.0, output_height - 1.0, output_height))
+        grid_x, grid_y = np.meshgrid(np.linspace(0.0, output_shape[1] - 1.0, output_shape[1]),
+                                     np.linspace(0.0, output_shape[0] - 1.0, output_shape[1]))
         # Flatten grid.
         flatgrid_x = np.reshape(grid_x, (1, -1))
         flatgrid_y = np.reshape(grid_y, (1, -1))
@@ -577,6 +584,45 @@ def warp_transform(conv_input, input_shape, output_shape, **kwargs):
         xy = tf.matmul(tf.reshape(kwargs["theta"], (-1, 2, 3)), tf_flatgrid)
         x = tf.reshape(tf.slice(xy, [0, 0, 0], [-1, 1, -1]), [-1])
         y = tf.reshape(tf.slice(xy, [0, 1, 0], [-1, 1, -1]), [-1])
+    elif "relposmap" in kwargs and len(kwargs) == 1:
+        # Update global pose field in source according to relative pose map 'relposmap' and reference frame 'refframe'.
+        # Determine 2d index of maximum in relposmap using flattened map.
+        map_flat = tf.reshape(kwargs["relposmap"], (batch_size, -1))
+        mapmax_idx = tf.argmax(map_flat, axis=1)
+        # Convert index to center-centered 2d coordinate.
+        # input_shape has the size of the relative position map.
+        pos_x = (cast(mapmax_idx % input_shape[3], "float32") - cast(input_shape[2] / 2.0, "float32")) / cast(input_shape[2] / 2.0, "float32")
+        pos_y = (cast(mapmax_idx // input_shape[3], "float32") - cast(input_shape[3] / 2.0, "float32")) / cast(input_shape[3] / 2.0, "float32")
+        pos_x = pos_x * output_shape[2] / 2.0
+        pos_y = pos_y * output_shape[3] / 2.0
+        rel_pos = dimshuffle(tf.stack((pos_x, pos_y), axis=1), (0, 1, 'x', 'x'))
+        # Return updated global position.
+        return conv_input + rel_pos
+    elif len(kwargs) == 4 and "relposmap" in kwargs and "scaling" in kwargs and "globalpos" in kwargs and "refshape" in kwargs:
+        # Determine some shapes
+        canvas_shape = shape(conv_input)
+        relposmap_shape = shape(kwargs["relposmap"])
+        batch_size = canvas_shape[0]
+        # Update global position on basis of relative pose map.
+        map_flat = tf.reshape(kwargs["relposmap"], (batch_size, -1))
+        mapmax_idx = tf.argmax(map_flat, axis=1)
+        pos_x = (cast(mapmax_idx % relposmap_shape[3], "float32") - cast(relposmap_shape[2] / 2.0, "float32")) / cast(relposmap_shape[2] / 2.0, "float32")
+        pos_y = (cast(mapmax_idx // relposmap_shape[3], "float32") - cast(relposmap_shape[3] / 2.0, "float32")) / cast(relposmap_shape[3] / 2.0, "float32")
+        pos_x = pos_x * kwargs["refshape"][2] / 2.0
+        pos_y = pos_y * kwargs["refshape"][3] / 2.0
+        new_pos_x = pos_x + kwargs["globalpos"][:,0,0,0]
+        new_pos_y = pos_y + kwargs["globalpos"][:,1,0,0]
+        # Use output_shape / scaling / new global_position to compute the transformation field map.
+        np_y_grid, np_x_grid = np.meshgrid(np.linspace(- output_shape[1] / 2, output_shape[1] / 2, output_shape[1]), \
+                                           np.linspace(- output_shape[0] / 2, output_shape[0] / 2, output_shape[0]))
+        x_grid = tf.constant(np.tile(np_x_grid, np.stack([batch_size, 1, 1])), dtype="float32")
+        y_grid = tf.constant(np.tile(np_y_grid, np.stack([batch_size, 1, 1])), dtype="float32")
+        X = x_grid * dimshuffle(flatten(kwargs["scaling"]), (0, 'x', 'x')) + dimshuffle(new_pos_x, (0, 'x', 'x'))
+        Y = y_grid * dimshuffle(flatten(kwargs["scaling"]), (0, 'x', 'x')) + dimshuffle(new_pos_y, (0, 'x', 'x'))
+        X = X / canvas_shape[2]
+        Y = Y / canvas_shape[3]
+        # Apply transformation field on canvas.
+        return warp_transform(conv_input, canvas_shape, output_shape, x_pos=X, y_pos=Y)
     else:
         raise ValueError
 
@@ -592,7 +638,7 @@ def warp_transform(conv_input, input_shape, output_shape, **kwargs):
 
     x_tmp = np.arange(batch_size, dtype=np.int32) * width * height
 #    rep = dimshuffle(ones((int(height * width),), dtype='int32'), ('x', 0))
-    rep = dimshuffle(ones((int(output_height * output_width),), dtype='int32'), ('x', 0))
+    rep = dimshuffle(ones((int(output_shape[0] * output_shape[1]),), dtype='int32'), ('x', 0))
     base = flatten(dot(reshape(x_tmp, (-1, 1)), rep))
 
     base_y0 = base + y0 * width
@@ -617,7 +663,7 @@ def warp_transform(conv_input, input_shape, output_shape, **kwargs):
     wd = dimshuffle(((x - x0_f) * (y - y0_f)), (0, 'x'))
     interpolated = sum([wa * Ia, wb * Ib, wc * Ic, wd * Id], axis=0)
     interpolated = reshape(cast(interpolated, "float32"), 
-                           np.stack([batch_size, output_height, output_width, channels]))
+                           np.stack([batch_size, output_shape[0], output_shape[1], channels]))
     # print("\nTRAFOSHAPE: " + str(interpolated.get_shape().as_list()))
     return dimshuffle(interpolated, (0, 3, 2, 1))
 
