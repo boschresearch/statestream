@@ -311,6 +311,9 @@ def generate_rollout_graph(loadfile=None, given_net=None, savefile=None):
 
 
     # Create output file.
-    with open(savefile, "w+") as f:
-        for l in tikz_lines:
-            f.write(l + "\n")
+    try:
+        with open(savefile, "w+") as f:
+            for l in tikz_lines:
+                f.write(l + "\n")
+    except:
+        print("\nWARNING: Unable to access " + str(savefile) + ". No rollout graph tex file generated.\n")
