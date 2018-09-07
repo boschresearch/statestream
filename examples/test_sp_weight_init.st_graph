@@ -31,6 +31,8 @@ neuron_pools:
         shape: [32, 16, 16]
     np4:
         shape: [32, 16, 16]
+    np5:
+        shape: [32, 16, 16]
 synapse_pools:
     sp_id:
         source: 
@@ -73,5 +75,25 @@ synapse_pools:
         target: np2
         rf: [[5]]
         init W_0_0: normal_-0.5_2.0
+    sp_uniform:
+        source:
+        - [np1]
+        target: np5
+        rf: [[5]]
+        init W_0_0: uniform
+    sp_uniform_par:
+        source:
+        - [np5]
+        target: np1
+        rf: [[5]]
+        init W_0_0: uniform_-2.0_4.0
+    sp_uniform_minmax:
+        source:
+        - [np5]
+        target: np5
+        rf: [[5]]
+        min W_0_0: -1.0
+        max W_0_0: 2.0
+        init W_0_0: uniform_-2.0_4.0
 plasticities: {}
 interfaces: {}
