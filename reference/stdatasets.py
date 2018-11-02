@@ -45,9 +45,9 @@ from keras.datasets.cifar import load_batch
 
 
 # Here, source files / folders must be specified accordingly. 
-cifar10_folder = "/dlc/OpenData/cifar/cifar-10-batches-py/"
-mnist_file = "/dlc/OpenData/mnist/mnist.pkl.gz"
-gtsrb_folder = "/dlc/OpenData/GTSRB/GTSRB_Final_Training_Images/GTSRB/Final_Training/Images/"
+cifar10_folder = "/.../cifar-10-batches-py/"
+mnist_file = "/.../mnist.pkl.gz"
+gtsrb_folder = "/.../GTSRB_Final_Training_Images/GTSRB/Final_Training/Images/"
 
 
 

@@ -3,7 +3,7 @@
 statestream
 ===========
 
-Statestream is an experimental toolbox for [streaming](https://arxiv.org/abs/1806.04965) (see also [this explanation](docs/from_one_frame_to_the_next.md))) deep neural networks. 
+Statestream is an experimental toolbox for [streaming](https://arxiv.org/abs/1806.04965) (see also [this explanation](docs/from_one_frame_to_the_next.md)) deep neural networks. 
 It provides tools to easily design, train, visualize, and manipulate streaming deep neural networks.
 
 This software is a research prototype and not ready for production use. It has neither been developed nor
@@ -28,7 +28,7 @@ continuous improvements will be made. Please make sure you always have the curre
 Some cornerstones
 -----------------
 
-* Emphasis on [streaming](https://arxiv.org/abs/1806.04965) (or [this](docs/from_one_frame_to_the_next.md))) data and networks.
+* Emphasis on [streaming](https://arxiv.org/abs/1806.04965) (or [this](docs/from_one_frame_to_the_next.md)) data and networks.
 * Emphasis on flexible and intuitive online visualization / manipulation of network states / parameters, etc.
 * Qualitative not quantitative exploration of new network architectures (first 50 percent vs. last 2 percent performance).
 * Emphasis on parallelism (processes, GPUs, restriced across machines).
