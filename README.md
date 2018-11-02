@@ -3,7 +3,7 @@
 statestream
 ===========
 
-Statestream is an experimental toolbox for [streaming](docs/from_one_frame_to_the_next.md) (synchronous layerwise-parallel) deep neural networks. 
+Statestream is an experimental toolbox for [streaming](https://arxiv.org/abs/1806.04965) (see also [this explanation](docs/from_one_frame_to_the_next.md))) deep neural networks. 
 It provides tools to easily design, train, visualize, and manipulate streaming deep neural networks.
 
 This software is a research prototype and not ready for production use. It has neither been developed nor
@@ -28,7 +28,7 @@ continuous improvements will be made. Please make sure you always have the curre
 Some cornerstones
 -----------------
 
-* Emphasis on [streaming](docs/from_one_frame_to_the_next.md) data and networks.
+* Emphasis on [streaming](https://arxiv.org/abs/1806.04965) (or [this](docs/from_one_frame_to_the_next.md))) data and networks.
 * Emphasis on flexible and intuitive online visualization / manipulation of network states / parameters, etc.
 * Qualitative not quantitative exploration of new network architectures (first 50 percent vs. last 2 percent performance).
 * Emphasis on parallelism (processes, GPUs, restriced across machines).
@@ -46,7 +46,7 @@ Differences to prominent DL-frameworks
 
 The statestream toolbox does not aim to improve over existing tools with respect to memory or computation efficiency but rather enables investigation of streaming networks and interact with them during runtime. In fact, the statestream toolbox is much more memory / computation in-efficient than other existing tools.
 
-* **streaming**: The network parts process information in a frame based / model-parallel synchronized manner, where one frame can be interpreted as one-step rollout of a recurrent neural network. Hence, dependent on network architecture, it may take several (up to many) frames until information is processed by the network. Now states stream through the network. 
+* **streaming**: The network parts process information in a frame based / model-parallel synchronized manner, where one frame can be interpreted as one-step rollout of a recurrent neural network. Hence, dependent on network architecture, it may take several (up to many) frames until information is processed by the network. Now states stream through the network. While this toolbox supports only streaming network rollouts, scripts to benchmark different rollouts can be found in the __reference/__ folder.
 * **separation of 'Layers'**: In contrast to most other deep learning toolkits, which decompose the network into layers, we try to emphasise the graph-nature of neural networks already in implementation. Hence, inside the statestream toolbox the network is decomposed in nodes (neuron-pools, short NP) and edges (synapse-pools, short SP). While NPs hold the state (a.k.a. feature maps) of the network, the SPs define the transformations between those states. For both, NPs and SPs, trainable parameters can be specified (e.g. bias for NPs, weights for SPs).
 * **local updates**: Due to its streaming nature for execution, losses and more general everything that changes parameters (in statestream these
 are called plasticities) are treated as separated parts of the network. While statestream also allows 'global' losses

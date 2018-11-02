@@ -1,0 +1,123 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 - for information on the respective copyright owner
+# see the NOTICE file and/or the repository https://github.com/boschresearch/statestream
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# This is the DSR4 model for the GTSRB experiment.
+# Dataset required: 
+#     * gtsrb
+
+name: gtsrb_DSR4
+rollout_factor: 8
+first_response_streaming: 4
+first_response_sequential: 1
+shortest_path_sequential: 8
+backend: tensorflow
+agents: 16
+neuron_pools:
+    image:
+        shape: [3, 32, 32]
+    h1:
+        shape: [32, 32, 32]
+        dropout: 0.25
+        act: relu
+    h11:
+        shape: [32, 32, 32]
+        dropout: 0.25
+        act: relu
+    h12:
+        shape: [32, 32, 32]
+        dropout: 0.25
+        act: relu
+    h2:
+        shape: [64, 16, 16]
+        dropout: 0.25
+        act: relu
+    h21:
+        shape: [64, 16, 16]
+        dropout: 0.25
+        act: relu
+    h22:
+        shape: [64, 16, 16]
+        dropout: 0.25
+        act: relu
+    hd: 
+        shape: [512, 4, 4]
+        dropout: 0.5
+        act: relu
+    prediction:
+        shape: [43, 1, 1]
+synapse_pools:
+    img_h1:
+        source: [[image]]
+        target: h1
+        rf: [[5]]
+    h1_h11:
+        source: [[h1]]
+        target: h11
+        rf: [[3]]
+    h1_h12:
+        source: [[h1]]
+        target: h12
+        rf: [[3]]
+    h11_h12:
+        source: [[h11]]
+        target: h12
+        rf: [[3]]
+    h1_h2:
+        source: [[h1]]
+        target: h2
+        rf: [[3]]
+    h11_h2:
+        source: [[h11]]
+        target: h2
+        rf: [[3]]
+    h12_h2:
+        source: [[h12]]
+        target: h2
+        rf: [[3]]
+    h2_h21:
+        source: [[h2]]
+        target: h21
+        rf: [[3]]
+    h2_h22:
+        source: [[h2]]
+        target: h22
+        rf: [[3]]
+    h21_h22:
+        source: [[h21]]
+        target: h22
+        rf: [[3]]
+    h2_hd:
+        source: [[h2]]
+        target: hd
+        rf: [[3]]
+    h21_hd:
+        source: [[h21]]
+        target: hd
+        rf: [[3]]
+    h22_hd:
+        source: [[h22]]
+        target: hd
+        rf: [[3]]
+    hd_pred:
+        source: [[hd]]
+        target: prediction
+plasticities: {}
+interfaces:
+    data:
+        type: gtsrb
+        in: []
+        out: [image]
