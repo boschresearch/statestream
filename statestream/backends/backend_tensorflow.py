@@ -584,41 +584,20 @@ def warp_transform(conv_input, input_shape=None, output_shape=None, **kwargs):
         xy = tf.matmul(tf.reshape(kwargs["theta"], (-1, 2, 3)), tf_flatgrid)
         x = tf.reshape(tf.slice(xy, [0, 0, 0], [-1, 1, -1]), [-1])
         y = tf.reshape(tf.slice(xy, [0, 1, 0], [-1, 1, -1]), [-1])
-    elif "relposmap" in kwargs and len(kwargs) == 1:
-        # Update global pose field in source according to relative pose map 'relposmap' and reference frame 'refframe'.
-        # Determine 2d index of maximum in relposmap using flattened map.
-        map_flat = tf.reshape(kwargs["relposmap"], (batch_size, -1))
-        mapmax_idx = tf.argmax(map_flat, axis=1)
-        # Convert index to center-centered 2d coordinate.
-        # input_shape has the size of the relative position map.
-        pos_x = (cast(mapmax_idx % input_shape[3], "float32") - cast(input_shape[2] / 2.0, "float32")) / cast(input_shape[2] / 2.0, "float32")
-        pos_y = (cast(mapmax_idx // input_shape[3], "float32") - cast(input_shape[3] / 2.0, "float32")) / cast(input_shape[3] / 2.0, "float32")
-        pos_x = pos_x * output_shape[2] / 2.0
-        pos_y = pos_y * output_shape[3] / 2.0
-        rel_pos = dimshuffle(tf.stack((pos_x, pos_y), axis=1), (0, 1, 'x', 'x'))
-        # Return updated global position.
-        return conv_input + rel_pos
-    elif len(kwargs) == 4 and "relposmap" in kwargs and "scaling" in kwargs and "globalpos" in kwargs and "refshape" in kwargs:
-        # Determine some shapes
+    elif len(kwargs) == 2 and "scaling" in kwargs and "globalpos" in kwargs:
+        # Determine some shapes.
         canvas_shape = shape(conv_input)
-        relposmap_shape = shape(kwargs["relposmap"])
         batch_size = canvas_shape[0]
-        # Update global position on basis of relative pose map.
-        map_flat = tf.reshape(kwargs["relposmap"], (batch_size, -1))
-        mapmax_idx = tf.argmax(map_flat, axis=1)
-        pos_x = (cast(mapmax_idx % relposmap_shape[3], "float32") - cast(relposmap_shape[2] / 2.0, "float32")) / cast(relposmap_shape[2] / 2.0, "float32")
-        pos_y = (cast(mapmax_idx // relposmap_shape[3], "float32") - cast(relposmap_shape[3] / 2.0, "float32")) / cast(relposmap_shape[3] / 2.0, "float32")
-        pos_x = pos_x * kwargs["refshape"][2] / 2.0
-        pos_y = pos_y * kwargs["refshape"][3] / 2.0
-        new_pos_x = pos_x + kwargs["globalpos"][:,0,0,0]
-        new_pos_y = pos_y + kwargs["globalpos"][:,1,0,0]
+        # Convert coordinates [-1,1] -> [C/2 - C/4, C/2 + C/4], C being the canvas size.
+        x_pos = kwargs["globalpos"][:,0,0,0] * (canvas_shape[2] / 4) + canvas_shape[2] / 2
+        y_pos = kwargs["globalpos"][:,1,0,0] * (canvas_shape[3] / 4) + canvas_shape[2] / 2
         # Use output_shape / scaling / new global_position to compute the transformation field map.
         np_y_grid, np_x_grid = np.meshgrid(np.linspace(- output_shape[1] / 2, output_shape[1] / 2, output_shape[1]), \
                                            np.linspace(- output_shape[0] / 2, output_shape[0] / 2, output_shape[0]))
         x_grid = tf.constant(np.tile(np_x_grid, np.stack([batch_size, 1, 1])), dtype="float32")
         y_grid = tf.constant(np.tile(np_y_grid, np.stack([batch_size, 1, 1])), dtype="float32")
-        X = x_grid * dimshuffle(flatten(kwargs["scaling"]), (0, 'x', 'x')) + dimshuffle(new_pos_x, (0, 'x', 'x'))
-        Y = y_grid * dimshuffle(flatten(kwargs["scaling"]), (0, 'x', 'x')) + dimshuffle(new_pos_y, (0, 'x', 'x'))
+        X = x_grid * dimshuffle(flatten(kwargs["scaling"]), (0, 'x', 'x')) + dimshuffle(x_pos, (0, 'x', 'x'))
+        Y = y_grid * dimshuffle(flatten(kwargs["scaling"]), (0, 'x', 'x')) + dimshuffle(y_pos, (0, 'x', 'x'))
         X = X / canvas_shape[2]
         Y = Y / canvas_shape[3]
         # Apply transformation field on canvas.
