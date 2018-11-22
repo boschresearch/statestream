@@ -25,15 +25,19 @@ agents: 8
 backend: tensorflow
 neuron_pools:
     np0:
-        shape: [4, 1, 1]
+        shape: [6, 1, 1]
         noise: normal
         noise_std: 0.1
     np1:
-        shape: [4, 1, 1]
+        shape: [6, 1, 1]
     np2:
         shape: [12, 1, 1]
     np3:
         shape: [12, 1, 1]
+    np4:
+        shape: [3, 1, 1]
+    np5:
+        shape: [3, 1, 1]
 synapse_pools:
     sp_01:
         source: 
@@ -51,6 +55,18 @@ synapse_pools:
         source: 
         - [np0]
         target: np3
+        rf: [[1]]
+        init W_0_0: Id
+    sp_04:
+        source: 
+        - [np0]
+        target: np4
+        rf: [[1]]
+        init W_0_0: id
+    sp_05:
+        source: 
+        - [np0]
+        target: np5
         rf: [[1]]
         init W_0_0: Id
 plasticities: {}
