@@ -375,35 +375,13 @@ class SynapsePool(object):
                                                                             [tgt_shape[2], tgt_shape[3]],
                                                                             theta=self.source_np_state[1][0]))
                     elif len(self.source_np) == 3:
-                        # SRC[0]: 2D global position in canvas coordinates.
-                        # SRC[1]: position map for relative update of global position
-                        # SRC[2]: reference frame for relative position
-                        trafo_map_shape = np_state_shape(self.net, self.p["source"][1][0])
-                        reference_shape = np_state_shape(self.net, self.p["source"][2][0])
-                        # Assume a 1-d relative pose map in source[1] and a global 2d pose in source[0].
-                        assert(trafo_map_shape[1] == 1), \
-                            "ERROR: Expected relative pose map in source[1], got: " + str(trafo_map_shape)
-                        assert(src_shape[1] == 2), \
-                            "ERROR: Expected 2d position in source[0], got: " + str(src_shape)
-                        self.post_synaptic.append(self.B.warp_transform(self.source_np_state[0][0], 
-                                                                        trafo_map_shape,
-                                                                        reference_shape,
-                                                                        relposmap=self.source_np_state[1][0]))
-                    elif len(self.source_np) == 5:
                         # Assuming 2 parameters: [position map [1, X, Y], scaling factor [1, 1, 1]].
                         # Assert second transformation is scalar.
                         # SRC[0]: source canvas from which to extract
-                        # SRC[1]: relative position map for global focus position update
-                        # SRC[2]: reference frame for relative posiion
-                        # SRC[3]: scaling of extracted window
-                        # SRC[4]: global pose in canvas pixel coordinates
-                        trafo_map_shape = np_state_shape(self.net, self.p["source"][1][0])
-                        trafo_ref_shape = np_state_shape(self.net, self.p["source"][2][0])
-                        trafo_scale_shape = np_state_shape(self.net, self.p["source"][3][0])
-                        trafo_pos_shape = np_state_shape(self.net, self.p["source"][4][0])
-                        # Assert first transformation is a 1-channel map.
-                        assert(trafo_map_shape[1] == 1), \
-                            "ERROR: Expected 1-channel map for spatial target position update, got: " + str(trafo_map_shape)
+                        # SRC[1]: scaling of extracted window
+                        # SRC[2]: global pose in canvas pixel coordinates
+                        trafo_scale_shape = np_state_shape(self.net, self.p["source"][1][0])
+                        trafo_pos_shape = np_state_shape(self.net, self.p["source"][2][0])
                         # Assert second transformation is scalar.
                         assert(trafo_scale_shape[1] == 1 and trafo_scale_shape[2] == 1 and trafo_scale_shape[3] == 1), \
                             "ERROR: Expected scalar scaling parameters for spatial transformer, got: " + str(trafo_scale_shape)
@@ -413,10 +391,8 @@ class SynapsePool(object):
                         self.post_synaptic.append(self.B.warp_transform(self.source_np_state[0][0], 
                                                                         None,
                                                                         [tgt_shape[2], tgt_shape[3]],
-                                                                        relposmap=self.source_np_state[1][0],
-                                                                        refshape=trafo_ref_shape,
-                                                                        scaling=self.source_np_state[3][0],
-                                                                        globalpos=self.source_np_state[4][0]))
+                                                                        scaling=self.source_np_state[1][0],
+                                                                        globalpos=self.source_np_state[2][0]))
                     return
             # Generate graph to compute all factor outputs.
             # _SCALED_CONV will be a 2D list of variables holding
@@ -771,11 +747,11 @@ class SynapsePool(object):
                             if self.binary:
                                 _SCALED_CONV_VAR_SUM[f] += _SCALED_CONV_VAR[f][i]
                         elif self.target_shapes[f][i] == "feature":
-                            _SCALED_CONV_SUM[f] += _SCALED_CONV[f][i].dimshuffle(0,1).dimshuffle(0,1,"x","x")
+                            _SCALED_CONV_SUM[f] += self.B.dimshuffle(self.B.dimshuffle(_SCALED_CONV[f][i], (0,1)), (0,1,"x","x"))
                         elif self.target_shapes[f][i] == "spatial":
-                            _SCALED_CONV_SUM[f] += _SCALED_CONV[f][i].dimshuffle(0,2,3).dimshuffle(0,"x",1,2)
+                            _SCALED_CONV_SUM[f] += self.B.dimshuffle(self.B.dimshuffle(_SCALED_CONV[f][i], (0,2,3)), (0,"x",1,2))
                         elif self.target_shapes[f][i] == "scalar":
-                            _SCALED_CONV_SUM[f] += _SCALED_CONV[f][i].dimshuffle(0).dimshuffle(0,"x","x","x")
+                            _SCALED_CONV_SUM[f] += self.B.dimshuffle(self.B.dimshuffle(_SCALED_CONV[f][i], (0)), (0,"x","x","x"))
                 # (Add bias and) evaluate factor activation function.
 
 
@@ -793,20 +769,21 @@ class SynapsePool(object):
                     # (before the product) into bernoullies again considering the factor-wise
                     # biases.
                     # Afterwards the product is again a bernoulli.
-                    if self.bias_shapes[f] is not None:
-                        _SCALED_CONV_SUM[f] -= self.dat['parameter'][b_name].dimshuffle('x',0,'x','x')
+                    # y = 1 - (0.5 + 0.5 * erf(x / sqrt(2) var(x)))
+                    if self.bias_shapes[f] == "feature":
+                        _SCALED_CONV_SUM[f] -= self.B.dimshuffle(self.dat['parameter'][b_name], ('x',0,'x','x'))
                     _SCALED_CONV_SUM[f] /= self.B.sqrt(_SCALED_CONV_VAR_SUM[f] + 1e-16)
-                    _SCALED_CONV_SUM[f] = self.B.erf(_SCALED_CONV_SUM[f] / np.sqrt(2.0))
+                    _SCALED_CONV_SUM[f] = 0.5 + 0.5 * self.B.erf(_SCALED_CONV_SUM[f] / np.sqrt(2.0))
                 else:
                     if self.bias_shapes[f] is None:
                         placeholder = "_SCALED_CONV_SUM[f]"
                     else:
                         if self.bias_shapes[f] == "full":
-                            placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,1,2)"
+                            placeholder = "_SCALED_CONV_SUM[f] + self.B.dimshuffle(self.dat['parameter'][b_name], ('x',0,1,2))"
                         elif self.bias_shapes[f] == "feature":
-                            placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x',0,'x','x')"
+                            placeholder = "_SCALED_CONV_SUM[f] + self.B.dimshuffle(self.dat['parameter'][b_name], ('x',0,'x','x'))"
                         elif self.bias_shapes[f] == "spatial":
-                            placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name].dimshuffle('x','x',0,1)"
+                            placeholder = "_SCALED_CONV_SUM[f] + self.B.dimshuffle(self.dat['parameter'][b_name], ('x','x',0,1))"
                         elif self.bias_shapes[f] == "scalar":
                             placeholder = "_SCALED_CONV_SUM[f] + self.dat['parameter'][b_name][0]"
                     evalact = self.eval_fnc(activation=self.act[f], 

@@ -538,6 +538,12 @@ def sp_init(net, name, dat_name, dat_layout, mode=None):
             else:
                 dat_value = (float(init_as) * np.ones(dat_layout.shape, dtype=dat_layout.dtype)).astype(dat_layout.dtype)
 
+        elif dat_name[0] in ["b"]:
+            # For now no special initializations for biases, only accept scalars.
+            if isinstance(init_as, str):
+                dat_value = (float(0.0) * np.ones(dat_layout.shape, dtype=dat_layout.dtype)).astype(dat_layout.dtype)
+            else:
+                dat_value = (float(init_as) * np.ones(dat_layout.shape, dtype=dat_layout.dtype)).astype(dat_layout.dtype)
         else:
             if init_as in ["zero", 0]:
                 dat_value = np.zeros(dat_layout.shape, dtype=dat_layout.dtype)

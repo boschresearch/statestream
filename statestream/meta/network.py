@@ -546,33 +546,42 @@ class MetaNetwork(object):
                 for s,S in self.net[mod].items():
                     for i,I in S.items():
                         if isinstance(I, str):
-                            contains_global = False
                             for gi,GI in self.net["globals"].items():
                                 if gi in I:
                                     I = I.replace(gi, str(GI))
-                                    contains_global = True
-                            if contains_global:
+                            # Only evaluate in case of full (final) evaluation.
+                            try:
                                 S[i] = eval(I)
+                                if not isinstance(S[i], float) and not isinstance(S[i], int):
+                                    S[i] = I
+                            except:
+                                S[i] = I                                
                         elif isinstance(I, list):
                             for e,E in enumerate(I):
                                 if isinstance(E, str):
-                                    contains_global = False
                                     for gi,GI in self.net["globals"].items():
                                         if gi in E:
                                             E = E.replace(gi, str(GI))
-                                            contains_global = True
-                                    if contains_global:
+                                    # Only evaluate in case of full (final) evaluation.
+                                    try:
                                         S[i][e] = eval(E)
+                                        if not isinstance(S[i][e], float) and not isinstance(S[i][e], int):
+                                            S[i][e] = E
+                                    except:
+                                        S[i][e] = E                               
                                 elif isinstance(E, list):
                                     for ee,EE in enumerate(E):
                                         if isinstance(EE, str):
-                                            contains_global = False
                                             for gi,GI in self.net["globals"].items():
                                                 if gi in EE:
                                                     EE = EE.replace(gi, str(GI))
-                                                    contains_global = True
-                                            if contains_global:
+                                            # Only evaluate in case of full (final) evaluation.
+                                            try:
                                                 S[i][e][ee] = eval(EE)
+                                                if not isinstance(S[i][e][ee], float) and not isinstance(S[i][e][ee], int):
+                                                    S[i][e][ee] = EE
+                                            except:
+                                                S[i][e][ee] = EE
 
         # Time to check sanity of build network.
         if not self.is_sane():
