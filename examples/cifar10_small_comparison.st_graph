@@ -22,14 +22,15 @@
 
 
 name: cifar10_small_comparison
-agents: 64
+agents: 128
+backend: tensorflow
 tag_specs:
     np_A:
         act: relu
     np_B:
-        act: relu
+        act: elu
     sp_A:
-        init W_0_0: xavier
+        init W_0_0: xavier_4.0
     sp_B:
         init W_0_0: xavier_4.0
 modules:
@@ -113,6 +114,8 @@ modules:
                 target_t: 0
                 optimizer: rmsprop
                 lr: 1e-4
+                #decay: 0.999
+                #momentum: 0.99
                 rho: 0.9
                 tags: [_my_plast_tag]
                 parameter:
@@ -136,16 +139,16 @@ modules:
                     cf10_pred: prediction
                     cf10_image: image
                     cf10_label: label
-                source_path: /opt/dl/data/cifar10/cifar-10-batches-py/
+                source_path: /dlc/OpenData/cifar/cifar-10-batches-py/
                 fading: 0
-                min_duration: 8
-                max_duration: 12
+                min_duration: 4
+                max_duration: 8
 cf10_net:
     A:
         my_np_tag: np_A
         my_sp_tag: sp_A
         my_plast_tag: plast_A
-        my_loss_fcn: negloglikelihood
+        my_loss_fcn: categorical_crossentropy
     B:
         my_np_tag: np_B
         my_sp_tag: sp_B

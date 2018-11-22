@@ -22,7 +22,11 @@
 
 name: cifar10_small
 agents: 64
-backend: theano
+backend: tensorflow
+tag_specs:
+    layernorm:
+        layernorm_mean: spatial
+        layernorm_std: spatial
 neuron_pools:
     image:
         shape: [3, 32, 32]
@@ -32,29 +36,30 @@ neuron_pools:
         tags: [sensor]
     conv1_1:
         shape: [32, 32, 32]
-        tags: [conv1]
-        act: selu
+        tags: [conv1, layernorm]
+        act: relu
+        device: gpu:0
     conv1_2:
         shape: [32, 16, 16]
-        tags: [conv1]
-        act: selu
+        tags: [conv1, layernorm]
+        act: relu
         dropout: 0.25
         device: gpu:0
     conv2_1:
         shape: [64, 16, 16]
-        tags: [conv2]
-        act: selu
+        tags: [conv2, layernorm]
+        act: relu
         device: gpu:0
     conv2_2:
         shape: [64, 8, 8]
-        tags: [conv2]
-        act: selu
+        tags: [conv2, layernorm]
+        act: relu
         dropout: 0.25
         device: gpu:0
     dense:
         shape: [512, 1, 1]
         tags: [dense]
-        act: selu
+        act: relu
         dropout: 0.5
         device: gpu:0
     prediction:
@@ -133,7 +138,7 @@ interfaces:
             cf10_pred: prediction
             cf10_image: image
             cf10_label: label
-        source_path: /opt/dl/data/cifar10/cifar-10-batches-py/
+        source_path: /dlc/OpenData/cifar/cifar-10-batches-py/
         fading: 0
         min_duration: 8
         max_duration: 12
