@@ -132,6 +132,7 @@ class ProcessIf(object):
             self.background = pg.Surface((self.screen_width,
                                           self.screen_height)).convert()
             self.background.fill(self.cc((0,0,0)))
+            self.init_screen()
             self.viz_init = True
         # Get current mouse position.
         self.POS = pg.mouse.get_pos()
@@ -179,6 +180,11 @@ class ProcessIf(object):
 
     def update_screen(self):
         """Interface dependent update of interface visualization.
+        """
+        pass
+
+    def init_screen(self):
+        """Interface dependent initialization of interface visualization.
         """
         pass
 
