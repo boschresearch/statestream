@@ -18,7 +18,7 @@ synapse_pools:
 
 Each sub-list (e.g. [np1, np2] in the example) specifies the inputs to a factor. In this example, sp1 would have three factors. For the example above, we would have the following six weight matrices: W_0_0, W_0_1, W_1_0, W_1_1, W_1_2, W_2_0 and the SP would compute:
 
-post_synaptic = (W_0_0 * np1 + W_0_1 * np2) x (W_1_0 * np3 + W_1_1 * np2 + W_1_2 * np4) x (W_2_0 * np1)
+post_synaptic = M * [ (W_0_0 * np1 + W_0_1 * np2) x (W_1_0 * np3 + W_1_1 * np2 + W_1_2 * np4) x (W_2_0 * np1) ]
 
 Here '*' denotes a convolution and 'x' the element-wise multiplication. In case the pre-processing projection (ppp) parameter is specified, the convolutions become:
 
@@ -35,8 +35,9 @@ The following steps are performed by each synapse-pool in the given order, some 
 7) All factors are multiplied.
 8) Avgout is applied.
 9) Maxout is applied.
-10) The SP activation is applied.
-11) Noise is added.
+10) The transformation M is applied.
+11) The SP activation is applied.
+12) Noise is added.
 
 In the minimal case, only step 3) is performed.
 
@@ -65,6 +66,8 @@ Specification parameters
 * **weight_shapes** (type: list(list(str))): A shape for each weight matrix (see also [this](shapes.md)).
 * **avgout**, **maxout** (type: int): Integer specifying a factor for the number of features used for maxout or avgout. The default is 1 for both and has no effect.
 * **ppp** (type: list(list(int))): A Pre-Processing Projection dimension for each source neuron-pool. This projection is a convolution with receptive field sizes equal to one, altering (pre-processing, selecting) the source's features. The default is 0 for all sources and ignores this pre-processing step.
+* **M** (type: [int, int]): A final linear transformation M (dense or convolutional) can be applied on the product over sums of the SP. If set, the first integer specifies the new target feature dimension for the previous transformation (product, sum). The second integer specifies the receptive field size of the transformation M. With this, an MLP can be realized inside a single SP, where W_0_0 transforms the input into some hidden feature space (of dimension M[0]) and the transformation M maps this hidden (SP internal, memory-less) state onto the post-synaptic activation. With this transformation M, the space of possible functions realized with a single SP gets increased significantly. By default this transformation is ignored.
+* **func** (type: string): Specifies the function for a functional synapse-pool (see below). By default, this is not set and the synapse-pool is treated as described here.
 
 If **NOSPRING** is added as a tag for a SP, this SP will not enforce NP attraction forces in the main visualization.
 
@@ -87,6 +90,28 @@ By default, all weight parameters are initialized with Xavier initialization [[X
 Initializations are implemented in [meta/synapse_pools.py](../statestream/meta/synapse_pool.py).
 
 Please see also the examples folder for more details.
+
+
+Functional synapse-pool
+-----------------------
+
+One special type of synapse-pool is the functional synapse-pool. This SP is parameter free and only has the **source**, **target**, and **func** specifications from above. This SP enables the realization of simple functions which cannot be easily expressed using the formulation from above. The **func** setting is a string that specifies the used function. All given source (states) can be referred to in this function using **$fi**, where fi is a tuple of two integers specifying the factor and entry of the desired source NP. E.g.:
+
+```
+neuron_pools:
+	h1:
+		shape: [128, 64, 32]
+	h2:
+		shape: [128, 64, 32]
+	h3:
+		shape: [1, 1, 1]
+synapse_pools:
+	MSE:
+	    source: [[h1], [h2]]
+	    target: h3
+	    func: "B.mean(($00 - $10)**2, axis=(1,2,3), keepdims=True)"
+```
+
 
 
 Transformer synapse-pool

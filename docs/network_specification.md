@@ -34,6 +34,8 @@ neuron_pools: {}
 
 Every item (NPs, SPs, PLASTs and IFs) has a 'device' parameter, which is set to 'cpu' by default. It can be set, for example, to 'gpu:0' to shift the computations of this item onto 'GPU0'.
 
+Every item has an optional 'at start' parameter, which determines its initial state. By default all items are in the running state '0'. To turn off a certain item at start, 'at start' can be set to '2'.
+
 Prior to instantiation of the network's structure in multiple processes, some sanity checks are performed using **statestream.meta.network.is_sane()**.
 
 For examples, please see the examples folder.
