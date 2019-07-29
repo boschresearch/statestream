@@ -215,9 +215,9 @@ class ProcessIf_roman_numerals(ProcessIf):
         interface, because data is generated randomly anyway, hence a split into
         train and test data makes no sense.
     """ 
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         # Initialize parent ProcessIf class
-        ProcessIf.__init__(self, name, ident, net, param)
+        ProcessIf.__init__(self, name, ident, metanet, param)
 
 
 
