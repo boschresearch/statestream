@@ -209,6 +209,9 @@ def np_shm_layout(name, net, param):
         elif p["noise"] == "uniform":
             shm_layout["parameter"]["noise_min"] = ShmL("backend", (), dtype, -1.0)
             shm_layout["parameter"]["noise_max"] = ShmL("backend", (), dtype, 1.0)
+        elif p["noise"] == "Bernoulli":
+            shm_layout["parameter"]["noise_prob"] = ShmL("backend", (), dtype, 0.5)
+
     # Check for dropout.
     if "dropout" in p:
         shm_layout["parameter"]["dropout"] \
