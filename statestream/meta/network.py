@@ -190,6 +190,152 @@ def is_sane_module_spec(net):
 # =============================================================================
 # =============================================================================
 
+def st_graph_import(inet):
+    """Recursively import other .st_graph files for inet.
+
+    Note, that we do not (want to) check for import loops.
+
+    Parameters
+    ----------
+k        inet :: Network dictionary to be augmented with its imports.
+
+    Returns
+    -------
+        onet :: the network inet with its added imports.
+    """
+
+    onet = copy.deepcopy(inet)
+
+    if "import" in inet:
+        example_path = os.path.dirname(os.path.abspath(__file__)) \
+                       + "/../../examples/"
+        for imp in inet["import"]:
+            # Create file name.
+            st_graph_file = example_path + str(imp[0]) + ".st_graph"
+            # Look if external st_graph file exists and load it as meta network.
+            if not os.path.isfile(st_graph_file):
+                print("\nError: Unable to import " + str(imp[0]) \
+                      + ". File not found: " + st_graph_file)
+            with open(st_graph_file) as f:
+#                    loc_mn = MetaNetwork(load_yaml(f))
+#                    loc_net = loc_mn.net
+
+                loc_net = load_yaml(f)
+
+                # Add source to source list.
+                if st_graph_file not in onet["__source_root__"]:
+                    onet["__source_root__"].append(st_graph_file)
+
+                loc_net["__source_root__"] = copy.deepcopy(onet["__source_root__"])
+
+                # Before importing loc_net into onet, import all of log_net imports to itself.
+                # This is a recursion and it will fail for loopy imports.
+                loc_net = st_graph_import(loc_net)
+
+                E = imp[1]
+                if E in ["neuron_pools", "synapse_pools", "plasticities", "interfaces"]:
+                    # Import all items of a type.
+                    if E in loc_net:
+                        # Add type if not yet present.
+                        if E not in onet:
+                            onet[E] = {}
+                        # Add all entries.
+                        for i,I in loc_net[E].items():
+                            # Add empty item if not exist already.
+                            if i not in onet[E]:
+                                onet[E][i] = {}
+                            # Add item parameters if not exist already.
+                            for p,P in I.items():
+                                if p not in onet[E][i]:
+                                    onet[E][i][p] = copy.copy(P)
+                elif E in ["modules", "core_clients"]:
+                    # Import all modules from source.
+                    if E in loc_net:
+                        # Add type if not yet present.
+                        if E not in onet:
+                            onet[E] = {}
+                        # Add all entries.
+                        for m,M in loc_net[E].items():
+                            # Add empty item if not exist already.
+                            if m not in onet[E]:
+                                onet[E][m] = copy.copy(M)
+                elif E.startswith("modules.") or E.startswith("core_clients."):
+                    # Import a single module or core client definition.
+                    mods = E.split(".")
+                    if mods[0] in loc_net:
+                        if mods[1] in loc_net[mods[0]]:
+                            if mods[0] not in onet:
+                                onet[mods[0]] = {}
+                            if mods[1] not in onet[mods[0]]:
+                                onet[mods[0]][mods[1]] \
+                                    = copy.copy(loc_net[mods[0]][mods[1]])
+                elif E == "tag_specs":
+                    # Import all modules from source.
+                    if E in loc_net:
+                        # Add type if not yet present.
+                        if E not in onet:
+                            onet[E] = {}
+                        # Add all entries.
+                        for m,M in loc_net[E].items():
+                            # Add empty item if not exist already.
+                            if m not in onet[E]:
+                                onet[E][m] = copy.copy(M)
+                elif E.startswith("tag_specs."):
+                    # Import a single module definition.
+                    mods = E.split(".")
+                    if "tag_specs" in loc_net:
+                        if mods[1] in loc_net["tag_specs"]:
+                            if not "tag_specs" in onet:
+                                onet["tag_specs"] = {}
+                            if mods[1] not in onet["tag_specs"]:
+                                onet["tag_specs"][mods[1]] \
+                                    = copy.copy(loc_net["tag_specs"][mods[1]])
+                elif E.startswith("neuron_pools.") \
+                        or E.startswith("synapse_pools.") \
+                        or E.startswith("plasticities.") \
+                        or E.startswith("interfaces."):
+                    # Import all items of type.tag
+                    mods = E.split(".")
+                    for i,I in loc_net[mods[0]].items():
+                        if "tags" in I:
+                            if mods[1] in I["tags"]:
+                                if not i in onet[mods[0]]:
+                                    onet[mods[0]][i] = {}
+                                # Add item parameters if not exist already.
+                                for p,P in I.items():
+                                    if p not in onet[mods[0]][i]:
+                                        onet[mods[0]][i][p] = copy.copy(P)
+                elif E.startswith("globals"):
+                    # Import all or specified global variable(s).
+                    if "globals" in loc_net:
+                        if E == "globals":
+                            # Import all global variables.
+                            if not "globals" in onet:
+                                onet["globals"] = {}
+                            for i,I in loc_net["globals"].items():
+                                onet["globals"][i] = copy.copy(I)
+                        elif E.startswith("globals."):
+                            # Import specific global variable.
+                            if not "globals" in onet:
+                                onet["globals"] = {}
+                            mods = E.split(".")
+                            if mods[1] in loc_net["globals"]:
+                                onet["globals"][mods[1]] = copy.copy(loc_net["globals"][mods[1]])
+                else:
+                    # Assume that a tag is given and import all items with this tag.
+                    for t in ["neuron_pools", "synapse_pools", "plasticities", "interfaces"]:
+                        for i,I in loc_net[t].items():
+                            if "tags" in I:
+                                if E in I["tags"]:
+                                    if not i in onet[t]:
+                                        onet[t][i] = copy.copy(I)
+
+    return onet
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
 class MetaNetwork(object):
     def __init__(self, net):
         self.raw_net = copy.deepcopy(net)
@@ -197,119 +343,8 @@ class MetaNetwork(object):
 
         # Decorate network graph.
         # =====================================================================
-        # Import from other st_graph files.
-        if "import" in self.net:
-            example_path = os.path.dirname(os.path.abspath(__file__)) \
-                           + "/../../examples/"
-            for imp in self.net["import"]:
-                # Create file name.
-                st_graph_file = example_path + str(imp[0]) + ".st_graph"
-                # Look if external st_graph file exists and load it as meta network.
-                if not os.path.isfile(st_graph_file):
-                    print("\nError: Unable to import " + str(imp[0]) \
-                          + ". File not found: " + st_graph_file)
-                with open(st_graph_file) as f:
-                    loc_mn = MetaNetwork(load_yaml(f))
-                    loc_net = loc_mn.net
-                    E = imp[1]
-                    if E in ["neuron_pools", "synapse_pools", "plasticities", "interfaces"]:
-                        # Import all items of a type.
-                        if E in loc_net:
-                            # Add type if not yet present.
-                            if E not in self.net:
-                                self.net[E] = {}
-                            # Add all entries.
-                            for i,I in loc_net[E].items():
-                                # Add empty item if not exist already.
-                                if i not in self.net[E]:
-                                    self.net[E][i] = {}
-                                # Add item parameters if not exist already.
-                                for p,P in I.items():
-                                    if p not in self.net[E][i]:
-                                        self.net[E][i][p] = copy.copy(P)
-                    elif E == "modules":
-                        # Import all modules from source.
-                        if E in loc_net:
-                            # Add type if not yet present.
-                            if E not in self.net:
-                                self.net[E] = {}
-                            # Add all entries.
-                            for m,M in loc_net[E].items():
-                                # Add empty item if not exist already.
-                                if m not in self.net[E]:
-                                    self.net[E][m] = copy.copy(M)
-                    elif E.startswith("modules."):
-                        # Import a single module definition.
-                        mods = E.split(".")
-                        if "modules" in loc_net:
-                            if mods[1] in loc_net["modules"]:
-                                if not "modules" in self.net:
-                                    self.net["modules"] = {}
-                                if mods[1] not in self.net["modules"]:
-                                    self.net["modules"][mods[1]] \
-                                        = copy.copy(loc_net["modules"][mods[1]])
-                    elif E == "tag_specs":
-                        # Import all modules from source.
-                        if E in loc_net:
-                            # Add type if not yet present.
-                            if E not in self.net:
-                                self.net[E] = {}
-                            # Add all entries.
-                            for m,M in loc_net[E].items():
-                                # Add empty item if not exist already.
-                                if m not in self.net[E]:
-                                    self.net[E][m] = copy.copy(M)
-                    elif E.startswith("tag_specs."):
-                        # Import a single module definition.
-                        mods = E.split(".")
-                        if "tag_specs" in loc_net:
-                            if mods[1] in loc_net["tag_specs"]:
-                                if not "tag_specs" in self.net:
-                                    self.net["tag_specs"] = {}
-                                if mods[1] not in self.net["tag_specs"]:
-                                    self.net["tag_specs"][mods[1]] \
-                                        = copy.copy(loc_net["tag_specs"][mods[1]])
-                    elif E.startswith("neuron_pools.") \
-                            or E.startswith("synapse_pools.") \
-                            or E.startswith("plasticities.") \
-                            or E.startswith("interfaces."):
-                        # Import all items of type.tag
-                        mods = E.split(".")
-                        for i,I in loc_net[mods[0]].items():
-                            if "tags" in I:
-                                if mods[1] in I["tags"]:
-                                    if not i in self.net[mods[0]]:
-                                        self.net[mods[0]][i] = {}
-                                    # Add item parameters if not exist already.
-                                    for p,P in I.items():
-                                        if p not in self.net[mods[0]][i]:
-                                            self.net[mods[0]][i][p] = copy.copy(P)
-                    elif E.startswith("globals"):
-                        # Import all or specified global variable(s).
-                        if "globals" in loc_net:
-                            if E == "globals":
-                                # Import all global variables.
-                                if not "globals" in self.net:
-                                    self.net["globals"] = {}
-                                for i,I in loc_net["globals"].items():
-                                    self.net["globals"][i] = copy.copy(I)
-                            elif E.startswith("globals."):
-                                # Import specific global variable.
-                                if not "globals" in self.net:
-                                    self.net["globals"] = {}
-                                mods = E.split(".")
-                                if mods[1] in loc_net["globals"]:
-                                    self.net["globals"][mods[1]] = copy.copy(loc_net["globals"][mods[1]])
-                    else:
-                        # Assume that a tag is given and import all items with this tag.
-                        for t in ["neuron_pools", "synapse_pools", "plasticities", "interfaces"]:
-                            for i,I in loc_net[t].items():
-                                if "tags" in I:
-                                    if E in I["tags"]:
-                                        if not i in self.net[t]:
-                                            self.net[t][i] = copy.copy(I)
-
-
+        # Import recursively from other st_graph files.
+        self.net = st_graph_import(self.net)
 
         # Convert modules to subgraphs.
         if "modules" in self.net:
@@ -652,7 +687,11 @@ class MetaNetwork(object):
                     src_shape = self.np_shape[S["source"][f][src]]
                     if "rf" in S:
                         if isinstance(S["rf"], list):
-                            rf = S["rf"][f][src]
+                            try:
+                                rf = S["rf"][f][src]
+                            except:
+                                print("Error: SP " + s + " receptive field: " + str(S["rf"]) + " sources: " + str(S["source"]))
+                                sys.exit()
                         else:
                             rf = S["rf"]
                         self.no_synapses += tgt_shape[0] * src_shape[0] * rf * rf
@@ -1156,19 +1195,7 @@ class MetaNetwork(object):
                                           + " for parameter " + str(P["parameter"][par]))
                                     is_sane = False
                                 else:
-                                    # Check for doubles.
-                                    for p0 in range(len(P["parameter"])):
-                                        if p0 != par:
-                                            found_double = True
-                                            for spec in range(len(P["parameter"])):
-                                                if P["parameter"][par][spec]!= P["parameter"][p0][spec]:
-                                                    found_double = False
-                                                    break
-                                            if found_double:
-                                                print("    Error: For plast " + p \
-                                                      + " double specification for parameter: " \
-                                                      + str(P["parameter"][par]))
-                                                is_sane = False
+                                    pass
 
         # Check interfaces.
         if "interfaces" in self.net:
@@ -1377,6 +1404,9 @@ def expand_path(net, p, self_conn_flag=True):
 
 def shortest_path(net, source_np, target_np):
     """Returns shortest path from source_np to target_np.
+
+    This function can exploce in computation terms for
+    complex networks.
     """
     # initialize all paths to target np as only target_np
     path_list = [[target_np]]
