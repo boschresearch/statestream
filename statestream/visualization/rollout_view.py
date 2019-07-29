@@ -1111,7 +1111,7 @@ class rollout_view(object):
             # =================================================================
             if not self.nonet:
                 for X in self.list_rep:
-                    X['state'] = self.IPC_PROC['state'][self.shm.proc_id[X['name']][0]].value
+                    X['state'] = self.IPC_PROC['state'][self.shm.proc_id[X['name']][0]]
             # =================================================================
 
             # =================================================================
