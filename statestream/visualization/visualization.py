@@ -158,9 +158,13 @@ class Visualization(object):
         self.all_up_current = 0
 
         # Some edit mode variables, handling online computation graph changes.
-        self.edit_mode = False
-        self.edited_items = []
-        self.edit_net = None
+        self.edited_item = {}
+        self.edited_parameter = {
+            "neuron_pools": ["act", "device", "dropout", "init b", "bias_shape"],
+            "synapse_pools": [],
+            "plasticities": [],
+            "interfaces": []
+        }
         
         # Initially show name only if mouse over.
         self.show_name = 0
@@ -259,7 +263,10 @@ class Visualization(object):
         self.conn_i = ['plast', 'if', 'sw', 'sp']
         self.conn_type_viz_flag = {}
         self.conn_type_viz_flag['sw'] = True
-        self.conn_type_viz_flag['sp'] = True
+        if len(self.net["neuron_pools"]) < 50:
+            self.conn_type_viz_flag['sp'] = 0
+        else:
+            self.conn_type_viz_flag['sp'] = 1
         self.conn_type_viz_flag['plast'] = False
         self.conn_type_viz_flag['if'] = False
 
@@ -378,7 +385,6 @@ class Visualization(object):
         for x in self.net["synapse_pools"]:
             self.sp_n2i[x] = cntr
             cntr += 1
-
         # Compute distance matrix for the moment.
         # conn_mat[src + tgt * no_nps] = min_path_len(src, tgt)
         self.conn_mat = np.zeros([len(self.np_n2i)**2,], 
@@ -427,7 +433,10 @@ class Visualization(object):
             self.graph[x]['out'] = list(set(self.graph[x]['out']))
 
         # This is the list of elected graph items.
+        # The order is a dict of the selected items with their selection orders.
+        # items_selected_order[item] = [1, 3, 7]
         self.items_selected = []
+        self.items_selected_order = {}
         
         # Online monitor structures.
         # monitor state: 0 off / 1 soft viz but off / 2 soft viz 
@@ -832,7 +841,7 @@ class Visualization(object):
         if SW['type'] == 'meta_var':
             SW['pos'] = np.array([self.vparam['screen_width'] // 2, 
                                   self.vparam['screen_height'] // 2],
-                                 dtype=np.float32)
+                                  dtype=np.float32)
 
         # Finally integrate into visualization structures.
         if parent_type == 'meta_var':
@@ -899,8 +908,12 @@ class Visualization(object):
     def cb_button_LMB_click_hide_conns(self, conn_type):
         '''Change visibility for connections.
         '''
-        self.conn_type_viz_flag[conn_type] \
-            = not self.conn_type_viz_flag[conn_type]
+        if conn_type == "sp":
+            self.conn_type_viz_flag[conn_type] \
+                = (self.conn_type_viz_flag[conn_type] + 1) % 3
+        else:
+            self.conn_type_viz_flag[conn_type] \
+                = not self.conn_type_viz_flag[conn_type]
         
 # =============================================================================
 
@@ -1026,21 +1039,6 @@ class Visualization(object):
             core_comm['instruction string'] = copy.copy(save_filename)
             core_comm['save/load'] = 1
             self.core_comm_queue.append(copy.deepcopy(core_comm))
-        elif modus == "edit param np":
-            # Update edited net.
-            self.edit_net["neuron_pools"][ptype]["act"] = str(param[0]["value"])
-            if ptype not in self.edited_items:
-                self.edited_items.append(ptype)
-        elif modus == "edit param sp":
-            # Update edited net.
-            self.edit_net["synapse_pools"][ptype]["rf"] = eval(param[0]["value"])
-            self.edit_net["synapse_pools"][ptype]["dilation"] = eval(param[0]["value"])
-            # Add item to list of edited items.
-            if ptype not in self.edited_items:
-                self.edited_items.append(ptype)
-        elif modus == "edit param if":
-            # Update edited net.
-            pass
         elif modus in ["sw magic", "sw pattern"]:
             # Apply a new magic function or pattern.
             old_SW = self.subwin_blit_queue[int(ptype)]
@@ -1145,11 +1143,11 @@ class Visualization(object):
                 self.IPC_PROC['if viz'][source].value = 1
             elif selections[button_id] == 'on/off':
                 if self.graph[source]['type'] in ['np', 'sp', 'plast']:
-                    if self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value in [0, 1]:
-                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value = 2
+                    if self.IPC_PROC['pause'][self.shm.proc_id[source][0]] in [0, 1]:
+                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]] = 2
                         self.graph[source]['pause'] = 2
-                    elif self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value == 2:
-                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value = 0
+                    elif self.IPC_PROC['pause'][self.shm.proc_id[source][0]] == 2:
+                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]] = 0
                         self.graph[source]['pause'] = 0
             elif selections[button_id] == 'interfaces':
                 if self.graph[source]['type'] in ['if']:
@@ -1189,62 +1187,53 @@ class Visualization(object):
                                         cb_over=self.cb_selection_window_over)
             elif selections[button_id] == 'pause':
                 if self.graph[source]['type'] == 'np':
-                    if self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value == 0:
-                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value = 1
+                    if self.IPC_PROC['pause'][self.shm.proc_id[source][0]] == 0:
+                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]] = 1
                         self.graph[source]['pause'] = 1
-                    elif self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value == 1:
-                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]].value = 0
+                    elif self.IPC_PROC['pause'][self.shm.proc_id[source][0]] == 1:
+                        self.IPC_PROC['pause'][self.shm.proc_id[source][0]] = 0
                         self.graph[source]['pause'] = 0
             elif selections[button_id] == 'edit':
-                # Edit hardwired parameters.
-                # If not alread change into edit mode.
-                if not self.edit_mode:
-                    self.edit_mode = True
-                    self.edit_net = copy.deepcopy(self.net)
                 # At first create item type dependent list of editable parameters.
                 if self.graph[source]['type'] == 'np':
-                    # Get default values for parameters.
-                    def_act = self.edit_net["neuron_pools"][source].get('act', 'Id')
+                    self.edited_item = copy.deepcopy(self.net["neuron_pools"][source])
+                    parameter = []
+                    for p in self.edited_parameter["neuron_pools"]:
+                        default = self.edited_item["neuron_pools"][source].get(p, "")
+                        parameter.append({
+                                "name": str(p) + ": ",
+                                "type": "string",
+                                "min": None,
+                                "max": None,
+                                "default": default
+                            })
                     # Create ParamSpecWindow to enter new parameters.
                     ParamSpecWindow(parent=None,
                                     wcollector=self.wcollector,
                                     pos=np.array([self.POS[0], self.POS[1]], dtype=np.float32),
-                                    modus='edit param np',
+                                    modus='edit np',
                                     ptype=source,
-                                    parameter=[
-                                    {
-                                        "name": "activation function: ",
-                                        "type": "string",
-                                        "min": None,
-                                        "max": None,
-                                        "default": def_act
-                                    }],
+                                    parameter=parameter,
                                     cb_LMB_clicked=self.cb_parameter_specification_done)
                 elif self.graph[source]['type'] == 'sp':
-                    # Get default values for receptive fields.
-                    def_rf = sp_get_dict(self.edit_net["synapse_pools"][source], "rf", 0)
-                    def_dil = sp_get_dict(self.edit_net["synapse_pools"][source], "dilation", 1)
+                    self.edited_item = copy.deepcopy(self.net["synapse_pools"][source])
+                    parameter = []
+                    for p in self.edited_parameter["synapse_pools"]:
+                        default = self.edited_item["synapse_pools"][source].get(p, "")
+                        parameter.append({
+                                "name": str(p) + ": ",
+                                "type": "string",
+                                "min": None,
+                                "max": None,
+                                "default": default
+                            })
                     # Create ParamSpecWindow to enter new parameters.
                     ParamSpecWindow(parent=None,
                                     wcollector=self.wcollector,
                                     pos=np.array([self.POS[0], self.POS[1]], dtype=np.float32),
-                                    modus='edit param sp',
+                                    modus='edit sp',
                                     ptype=source,
-                                    parameter=[
-                                    {
-                                        "name": "receptive field(s): ",
-                                        "type": "string",
-                                        "min": None,
-                                        "max": None,
-                                        "default": def_rf
-                                    },
-                                    {
-                                        "name": "dilations(s): ",
-                                        "type": "string",
-                                        "min": None,
-                                        "max": None,
-                                        "default": def_dil
-                                    }],
+                                    parameter=parameter,
                                     cb_LMB_clicked=self.cb_parameter_specification_done)
             else:
                 # If scalar parameter was selected open ParamSpecWindow, else 
@@ -1312,8 +1301,16 @@ class Visualization(object):
         elif modus == 'load graphview':
             # Load graphview from selected slot.
             self.load_graphview(id=button_id)
+        elif modus == 'edit np':
+            # Initialize new creation of the edited np.
+            # TODO: updated self.edited_item with the new parameters.
+            self.edit_graph()
+        elif modus == 'edit sp':
+            # Initialize new creation of the edited sp.
+            # TODO: updated self.edited_item with the new parameters.
+            self.edit_graph()
         elif modus == 'sw mode':
-            # Temporarily save some data of this sub-window.
+            # Temporarilly save some data of this sub-window.
             old_SW = self.subwin_blit_queue[int(source)]
             sw_source = copy.copy(old_SW['source'])
             sw_type = copy.copy(old_SW['type'])
@@ -1333,10 +1330,11 @@ class Visualization(object):
             new_SW['size'] = np.copy(sw_size)
         elif modus == 'tag':
             # Add all items with this tag to selection.
+            select_items = []
             for x, X in self.graph.items():
                 if selections[button_id] in self.net[S2L(X['type'])][x].get('tags', []):
-                    if x not in self.items_selected:
-                        self.items_selected.append(x)
+                    select_items.append(x)
+            self.select_items(select_items)
         elif modus == 'meta_var viz_sel var':
             # Select 'variable' and 'viz mode' for a meta-variable.
             # User has now selected the 'varialbe' and on the basis of this 'vars' shape
@@ -1355,11 +1353,11 @@ class Visualization(object):
         elif modus == 'meta_variable_type':
             if selections[button_id] == 'on/off':
                 for i in self.items_selected:
-                    if self.IPC_PROC['pause'][self.shm.proc_id[i][0]].value in [0, 1]:
-                        self.IPC_PROC['pause'][self.shm.proc_id[i][0]].value = 2
+                    if self.IPC_PROC['pause'][self.shm.proc_id[i][0]] in [0, 1]:
+                        self.IPC_PROC['pause'][self.shm.proc_id[i][0]] = 2
                         self.graph[i]['pause'] = 2
-                    elif self.IPC_PROC['pause'][self.shm.proc_id[i][0]].value == 2:
-                        self.IPC_PROC['pause'][self.shm.proc_id[i][0]].value = 0
+                    elif self.IPC_PROC['pause'][self.shm.proc_id[i][0]] == 2:
+                        self.IPC_PROC['pause'][self.shm.proc_id[i][0]] = 0
                         self.graph[i]['pause'] = 0
             else:
                 # Open new selection window for all possibible instances of a meta-var type.
@@ -1591,6 +1589,8 @@ class Visualization(object):
             sw_dict['tiles'] = copy.copy(SW['tiles'])
             sw_dict['tileable'] = copy.copy(SW['tileable'])
             sw_dict['glob_idx'] = copy.copy(SW['glob_idx'])
+            sw_dict['colormap'] = SW.get('colormap', None)
+            sw_dict['cm flag'] = SW.get('cm flag', False)
             graphview['subwindows'].append(copy.deepcopy(sw_dict))
         # Add item type / connection visibility settings.
         graphview['settings']['item type viz flag'] = {}
@@ -1666,10 +1666,13 @@ class Visualization(object):
                                                     mode=SW['mode'],
                                                     magic=SW['magic'],
                                                     patterns=SW['patterns'])
-                        new_SW['pos'] = np.copy(SW['pos'])
-                        new_SW['size'] = np.copy(SW['size'])
-                        new_SW['tiles'] = SW['tiles']
-                        new_SW['tileable'] = SW['tileable']
+                        if new_SW and SW:
+                            new_SW['pos'] = np.copy(SW['pos'])
+                            new_SW['size'] = np.copy(SW['size'])
+                            new_SW['tiles'] = SW['tiles']
+                            new_SW['tileable'] = SW['tileable']
+                            new_SW['colormap'] = SW.get('colormap', None)
+                            new_SW['cm flag'] = SW.get('cm flag', False)
                     elif SW['type'] == 'meta_var':
                         self.new_mv_subwins.append(copy.deepcopy(SW))
                 # Show name / profiler settings.
@@ -1679,7 +1682,7 @@ class Visualization(object):
                 self.buttons['profiler'].value = self.show_profiler
                 self.np_dist = graphview.get('np_dist', self.np_dist)
                 for i in self.graph:
-                    self.graph[i]['pause'] = int(self.IPC_PROC['pause'][self.shm.proc_id[i][0]].value)
+                    self.graph[i]['pause'] = int(self.IPC_PROC['pause'][self.shm.proc_id[i][0]])
 
 # =============================================================================
 
@@ -1735,6 +1738,12 @@ class Visualization(object):
         self.screen = pg.display.set_mode((self.vparam['screen_width'],
                                       self.vparam['screen_height']), pg.SRCALPHA, 32)
         clock = pg.time.Clock()
+
+        # Color layout.
+#        dark = copy.copy(self.vparam['background_color'])
+#        self.vparam['background_color'] = copy.copy(self.vparam['text_color'])
+#        self.vparam['text_color'] = copy.copy(dark)
+        
         background = pg.Surface(self.screen.get_size()).convert()
         background.fill(self.cc(self.vparam['background_color']))
 
@@ -2011,10 +2020,19 @@ class Visualization(object):
                                              cb_LMB_clicked=lambda x=self.graph_i[t]: self.cb_button_LMB_click_hide_items(x))
         # Hide buttons for connections.
         for t in range(len(self.conn_i)):
-            self.buttons['hide conn ' + self.conn_i[t]] \
-                = self.wcollector.add_button(None, sprite=['conn ' + self.conn_i[t] + ' on', 'conn ' + self.conn_i[t] + ' off'], 
-                                             pos=np.asarray([X0 + 8 * 32 + t * 32, Y0], dtype=np.float32), 
-                                             cb_LMB_clicked=lambda x=self.conn_i[t]: self.cb_button_LMB_click_hide_conns(x))
+            if self.conn_i[t] == "sp":
+                self.buttons['hide conn ' + self.conn_i[t]] \
+                    = self.wcollector.add_button(None, sprite=['conn ' + self.conn_i[t] + ' on',
+                                                               'conn ' + self.conn_i[t] + ' on', 
+                                                               'conn ' + self.conn_i[t] + ' off'], 
+                                                 pos=np.asarray([X0 + 8 * 32 + t * 32, Y0], dtype=np.float32), 
+                                                 cb_LMB_clicked=lambda x=self.conn_i[t]: self.cb_button_LMB_click_hide_conns(x))
+            else:
+                self.buttons['hide conn ' + self.conn_i[t]] \
+                    = self.wcollector.add_button(None, sprite=['conn ' + self.conn_i[t] + ' on',
+                                                               'conn ' + self.conn_i[t] + ' off'], 
+                                                 pos=np.asarray([X0 + 8 * 32 + t * 32, Y0], dtype=np.float32), 
+                                                 cb_LMB_clicked=lambda x=self.conn_i[t]: self.cb_button_LMB_click_hide_conns(x))
         # Add button to close all sub-windows.
         self.buttons['close all sw'] = self.wcollector.add_button(None,
                 sprite='close sw', 
@@ -2128,6 +2146,15 @@ class Visualization(object):
             else:
                 self.new_frame = False
 
+            # Once in a while, update pause/on/off item state.
+            # =================================================================
+            if current_viz_frame % 10 == 0:
+                for x,X in self.graph.items():
+                    self.graph[x]['pause'] = int(self.IPC_PROC['pause'][self.shm.proc_id[x][0]])
+                    if X['type'] in ['np', 'sp', 'if', 'plast']:
+                        self.graph[x]['state'] \
+                            = self.IPC_PROC['state'][self.shm.proc_id[x][0]]
+            # =================================================================
 
             # =================================================================
             # Update all meta variables here at an early point.
@@ -2164,16 +2191,6 @@ class Visualization(object):
                     SW_inst['pos'] = np.copy(SW['pos'])
                     SW_inst['size'] = np.copy(SW['size'])
                     del self.new_mv_subwins[0]
-            # =================================================================
-
-
-            # =================================================================
-            # Get all states.
-            # =================================================================
-            for x,X in self.graph.items():
-                if X['type'] in ['np', 'sp', 'if', 'plast']:
-                    self.graph[x]['state'] \
-                        = self.IPC_PROC['state'][self.shm.proc_id[x][0]].value
             # =================================================================
 
 
@@ -2240,11 +2257,12 @@ class Visualization(object):
                                            int(min(self.POS[1], LMB_hold_origin[1])),
                                            int(abs(self.POS[0] - LMB_hold_origin[0])),
                                            int(abs(self.POS[1] - LMB_hold_origin[1])))
+                        select_items = []
                         for x, X in self.graph.items():
                             if sel_rect.collidepoint(X['pos']):
-                                if x not in self.items_selected \
-                                        and self.graph_type_viz_flag[X['type']]:
-                                    self.items_selected.append(x)
+                                if self.graph_type_viz_flag[X['type']]:
+                                    select_items.append(x)
+                        self.select_items(select_items)
                     # Reset LMB variables.
                     LMB_hold = False
                     LMB_drag_type = None
@@ -2430,30 +2448,6 @@ class Visualization(object):
                                                         source=None,
                                                         modus='tag',
                                                         cb_LMB_clicked=self.cb_selection_window_click)
-                            elif event.key == pg.K_e:
-                                # Start / end network editing.
-                                if not self.is_shift_pressed:
-                                    # End editing and remove all edit changes.
-                                    self.edited_items = []
-                                    self.edit_net = None
-                                    self.edit_mode = False
-                                else:
-                                    # Save edited network to .st_graph file.
-                                    tmp_filename = os.path.expanduser('~') \
-                                                   + '/.statestream/edit_net-' \
-                                                   + str(self.IPC_PROC['session_id'].value) \
-                                                   + '.st_graph'
-                                    with open(tmp_filename, "w+") as f:
-                                        dump_yaml(self.edit_net, f)
-                                    # Instruct core to re-build edited network.
-                                    core_comm = {}
-                                    core_comm['instruction string'] = "edit"
-                                    core_comm['instruction'] = 1
-                                    self.core_comm_queue.append(copy.deepcopy(core_comm))
-                                    # Set back internal edit mode.
-                                    self.edited_items = []
-                                    self.edit_net = None
-                                    self.edit_mode = False
                             elif event.key == pg.K_SPACE:
                                 # Loop through subwindows with mouse over.
                                 sw_over_list = []
@@ -2490,8 +2484,10 @@ class Visualization(object):
                                 # Complete selection.
                                 if len(self.items_selected) == 0:
                                     # Add all items.
+                                    select_items = []
                                     for x in self.graph:
-                                        self.items_selected.append(x)
+                                        select_items.append(x)
+                                    self.select_items(select_items)
                                 else:
                                     # Check if only sps or only nps selected.
                                     only_nps = True
@@ -2505,15 +2501,17 @@ class Visualization(object):
                                             break
                                     # Update selection.
                                     if only_nps:
+                                        select_items = []
                                         for x, X in self.graph.items():
-                                            if X["type"] == "np" \
-                                                    and x not in self.items_selected:
-                                                self.items_selected.append(x)
+                                            if X["type"] == "np":
+                                                select_items.append(x)
+                                        self.select_items(select_items)
                                     if only_sps:
+                                        select_items = []
                                         for x, X in self.graph.items():
-                                            if X["type"] == "sp" \
-                                                    and x not in self.items_selected:
-                                                self.items_selected.append(x)
+                                            if X["type"] == "sp":
+                                                select_items.append(x)
+                                        self.select_items(select_items)
                                     if not only_nps and not only_sps:
                                         # Check if all selected
                                         all_selected = True
@@ -2524,11 +2522,13 @@ class Visualization(object):
                                                     break
                                         if all_selected:
                                             self.items_selected = []
+                                            self.items_selected_order = {}
                                         else:
+                                            select_items = []
                                             for x, X in self.graph.items():
-                                                if X["type"] in ["np", "sp", "if", "plast"] \
-                                                        and x not in self.items_selected:
-                                                    self.items_selected.append(x)
+                                                if X["type"] in ["np", "sp", "if", "plast"]:
+                                                    select_items.append(x)
+                                            self.select_items(select_items)
 
                         # Check for characters [a..z, 0..9] if command line typing.
                         if self.is_typing_command:
@@ -2631,12 +2631,15 @@ class Visualization(object):
                     if X['rect'].collidepoint(POS):
                         if self.is_shift_pressed:
                             if x in self.items_selected:
-                                self.items_selected \
-                                    = [i for i in self.items_selected if i != x]
+                                # Remove x from selected list.
+                                rem_idx = self.items_selected.index(x)
+                                del self.items_selected[rem_idx]
+                                del self.items_selected_order[x]
                             else:
-                                self.items_selected += [x]
+                                self.select_items([x])
                         else:
                             self.items_selected = [x]
+                            self.items_selected_order[x] = [0]
                         LMB_click = False
                         break
 
@@ -2807,9 +2810,11 @@ class Visualization(object):
                     elif MV.rects['name'].collidepoint(POS):
                         # Select all children.
                         self.items_selected = []
+                        self.items_selected_order = {}
+                        select_items = []
                         for i,I in enumerate(MV.sv):
-                            if I[0] not in self.items_selected:
-                                self.items_selected.append(I[0])
+                            select_items.append(I[0])
+                        self.select_items(select_items)
                         LMB_click = False
                     elif MV.rects['viz'].collidepoint(POS):
                         # Open menue of available 'variables' for this meta-variable.
@@ -2841,6 +2846,7 @@ class Visualization(object):
             # If nothing clicked, clear selection.
             if LMB_click:
                 self.items_selected = []
+                self.items_selected_order = {}
                 self.active_setting = None
                 LMB_click = False
                 
@@ -3457,46 +3463,68 @@ class Visualization(object):
                 conn_col = (127, 127, 127)
                 for x,X in self.graph.items():
                     # Draw all np-sp-np connections.
-                    if self.conn_type_viz_flag['sp'] and X['type'] == 'sp':
+                    if self.conn_type_viz_flag['sp'] in [0, 1] and X['type'] == 'sp':
                         if not self.graph_type_viz_flag['sp'] \
                                 and len(self.net['synapse_pools'][x]['source']) == 1 \
                                 and len(self.net['synapse_pools'][x]['source'][0]) == 1:
                             source = self.net['synapse_pools'][x]['source'][0][0]
                             target = self.net['synapse_pools'][x]['target']
-                            draw_dashed_line(self.screen, 
-                                             self.cc(conn_col), 
-                                             np.array([self.graph[source]['pos'][0], 
-                                                       self.graph[source]['pos'][1]]), 
-                                             np.array([self.graph[target]['pos'][0], 
-                                                       self.graph[target]['pos'][1]]), 
-                                             width=2,
-                                             dash=self.dash_size, 
-                                             offset=(current_frame % 32) / 16.0,
-                                             dash_type=1)
+                            if self.conn_type_viz_flag['sp'] == 0:
+                                draw_dashed_line(self.screen, 
+                                                 self.cc(conn_col), 
+                                                 np.array([self.graph[source]['pos'][0], 
+                                                           self.graph[source]['pos'][1]]), 
+                                                 np.array([self.graph[target]['pos'][0], 
+                                                           self.graph[target]['pos'][1]]), 
+                                                 width=2,
+                                                 dash=self.dash_size, 
+                                                 offset=(current_frame % 32) / 16.0,
+                                                 dash_type=1)
+                            elif self.conn_type_viz_flag['sp'] == 1:
+                                pg.draw.line(self.screen, 
+                                     self.cc(conn_col), 
+                                     [self.graph[source]['pos'][0], self.graph[source]['pos'][1]],
+                                     [self.graph[target]['pos'][0], self.graph[target]['pos'][1]], 
+                                     2)
                         else:
-                            for c in X['in']:
-                                if self.graph[c]['type'] == 'np':
-                                    draw_dashed_line(self.screen, 
+                            if self.conn_type_viz_flag['sp'] == 0:
+                                for c in X['in']:
+                                    if self.graph[c]['type'] == 'np':
+                                        draw_dashed_line(self.screen, 
+                                                         self.cc(conn_col), 
+                                                         np.array([self.graph[c]['pos'][0], 
+                                                                   self.graph[c]['pos'][1]]), 
+                                                         np.array([X['pos'][0], X['pos'][1]]), 
+                                                         width=2, 
+                                                         dash=self.dash_size, 
+                                                         offset=(current_frame % 32) / 16.0,
+                                                         dash_type=1)
+                                for c in X['out']:
+                                    if self.graph[c]['type'] == 'np':
+                                        draw_dashed_line(self.screen, 
+                                                         self.cc(conn_col), 
+                                                         np.array([X['pos'][0], X['pos'][1]]), 
+                                                         np.array([self.graph[c]['pos'][0], 
+                                                                   self.graph[c]['pos'][1]]), 
+                                                         width=2, 
+                                                         dash=self.dash_size, 
+                                                         offset=(current_frame % 32) / 16.0,
+                                                         dash_type=1)
+                            elif self.conn_type_viz_flag['sp'] == 1:
+                                for c in X['in']:
+                                    if self.graph[c]['type'] == 'np':
+                                        pg.draw.line(self.screen, 
                                                      self.cc(conn_col), 
-                                                     np.array([self.graph[c]['pos'][0], 
-                                                               self.graph[c]['pos'][1]]), 
-                                                     np.array([X['pos'][0], X['pos'][1]]), 
-                                                     width=2, 
-                                                     dash=self.dash_size, 
-                                                     offset=(current_frame % 32) / 16.0,
-                                                     dash_type=1)
-                            for c in X['out']:
-                                if self.graph[c]['type'] == 'np':
-                                    draw_dashed_line(self.screen, 
+                                                     [self.graph[c]['pos'][0], self.graph[c]['pos'][1]],
+                                                     [X['pos'][0], X['pos'][1]], 
+                                                     2)
+                                for c in X['out']:
+                                    if self.graph[c]['type'] == 'np':
+                                        pg.draw.line(self.screen, 
                                                      self.cc(conn_col), 
-                                                     np.array([X['pos'][0], X['pos'][1]]), 
-                                                     np.array([self.graph[c]['pos'][0], 
-                                                               self.graph[c]['pos'][1]]), 
-                                                     width=2, 
-                                                     dash=self.dash_size, 
-                                                     offset=(current_frame % 32) / 16.0,
-                                                     dash_type=1)
-
+                                                     [X['pos'][0], X['pos'][1]], 
+                                                     [self.graph[c]['pos'][0], self.graph[c]['pos'][1]],
+                                                     2)
             # Draw all for sub-windows, ifs and plasts.
             for x,X in self.graph.items():
                 # Draw all subwindow connections.
@@ -3575,12 +3603,7 @@ class Visualization(object):
                         border = 6
                     else:
                         border = 2
-                    # If edited, change border color.
-                    if x in self.edited_items:
-                        border_col = DEFAULT_COLORS['yellow']
-                        border = 4
-                    else:
-                        border_col = DEFAULT_COLORS['light']
+                    border_col = DEFAULT_COLORS['light']
                     # Blit item circle filled.
                     self.graph[x]['rect'] = plot_circle(self.screen, 
                                                         int(X['pos'][0]), 
@@ -3652,6 +3675,9 @@ class Visualization(object):
             if self.show_name in [1, 2]:
                 for x,X in self.graph.items():
                     if self.show_name == 2 and x not in self.items_selected:
+                        continue
+                    # Only show if item type is also visible.
+                    if not self.graph_type_viz_flag[X['type']]:
                         continue
                     self.screen.blit(self.fonts['small'].render(x, 
                                                                 1, 
@@ -4115,9 +4141,69 @@ class Visualization(object):
         pg.display.quit()
 
 
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
+    def core_handshake_block(reason):
+        """This method blocks the entire visualization until handshake from core.
+        """
+        handshake = False
+        while not handshake:
+            self.update_core_comm_queue()
+            # Wait.
+            time.sleep(0.01)
+            # Check for handshake.
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
+    def edit_graph(self):
+        """This initiates item editing via core communication.
+        """
+        # Save edited network to .st_graph file.
+        tmp_filename = os.path.expanduser('~') \
+                       + '/.statestream/edited_item-' \
+                       + str(self.IPC_PROC['session_id'].value) \
+                       + '.st_graph'
+        with open(tmp_filename, "w+") as f:
+            dump_yaml(self.edited_item, f)
+        # Instruct core to (re-)build edited item.
+        core_comm = {}
+        core_comm['instruction string'] = "edit"
+        core_comm['instruction'] = 1
+        self.core_comm_queue.append(copy.deepcopy(core_comm))
+
+        # Graph editing blocks visualization until core is done with editing.
+        self.core_handshake_block("edit")
+
+        # Update visualization internal states for edited item.
 
 
+        # Set back internal edit mode.
+        self.edited_item = {}
 
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
+    def select_items(self, items):
+        """Adds the list of items to the list of selected items.
+        """
+        # Determine selection order for new items.
+        new_order = 0
+        for i,I in self.items_selected_order.items():
+            if max(I) > new_order:
+                new_order = max(I)
+        new_order += 1
+        # Add items to selection list.
+        for i in items:
+            if i not in self.items_selected:
+                self.items_selected.append(i)
+                self.items_selected_order[i] = [new_order]
+            else:
+                self.items_selected_order[i].append(new_order)
 
 # =============================================================================
 # =============================================================================
@@ -4329,6 +4415,8 @@ class Visualization(object):
                 dim = int(SW['mode'].split()[1])
                 # Get color palette.
                 cm = SW.get('colormap', 'magma')
+                if not cm:
+                    cm = 'magma'
                 idx = (self.CM_CC[cm].shape[0] * np.arange(dat.shape[dim])) // dat.shape[dim]
                 colors = self.CM_CC[cm][idx,:]
                 # Clear temporal surface.
