@@ -39,6 +39,10 @@ class STCClient(object):
         # Get parameter dictionary.
         self.p = self.net["core_clients"][self.name]
 
+        # Get / set activation flag and start frame.
+        self.active = self.p.get("state", False)
+        self.start_frame = self.p.get("start frame", 2)
+
         # Message printed in terminal.
         self.mesg = []
             
