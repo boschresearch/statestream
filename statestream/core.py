@@ -120,7 +120,9 @@ class StateStream(object):
                 if len(sys.argv[1]) > 10:
                     if sys.argv[1].endswith(".st_graph"):
                         with open(sys.argv[1]) as f:
-                            self.mn = mn.MetaNetwork(load_yaml(f))
+                            tmp_net = load_yaml(f)
+                            tmp_net["__source_root__"] = [sys.argv[1][:]]
+                            self.mn = mn.MetaNetwork(tmp_net)
                     elif sys.argv[1].endswith(".st_net"):
                         # Set flag to initialize with loaded for later.
                         self.flag_load_at_start = True
@@ -129,6 +131,7 @@ class StateStream(object):
                         with open(sys.argv[1], "rb") as f:
                             # Load it here only for graph initialization.
                             loadList = pckl.load(f)
+                            loadList[0][1]["__source_root__"] = [sys.argv[1][:]]
                             # Get network graph.
                             self.mn = mn.MetaNetwork(loadList[0][1])
                     else:
@@ -150,7 +153,7 @@ class StateStream(object):
 
         # Generate meta network with ids.
         self.net = self.mn.net
-        
+
         # Generate compileable tikz file.
         if not os.path.isdir(self.param["core"]["save_path"] + os.sep + "graph_tikz"):
             os.makedirs(self.param["core"]["save_path"] + os.sep + "graph_tikz")
@@ -190,18 +193,21 @@ class StateStream(object):
         self.IPC_PROC["net reset"] = mp.Value("d", 0)
         # Add ipc for process management.
         #   "I", "W", "R", "WaW", "WaR", "E"
-        self.IPC_PROC["state"] = [mp.Value("d", process_state["I"]) for i in range(self.param["core"]["max_processes"])]
+#        self.IPC_PROC["state"] = mp.Value("d", process_state["I"]) for i in range(self.param["core"]["max_processes"])]
+        self.IPC_PROC["state"] = mp.Array("d", [process_state["I"] for i in range(self.param["core"]["max_processes"])])
         # The system process identifier for each process.
-        self.IPC_PROC["pid"] = [mp.Value("d", 0) for i in range(self.param["core"]["max_processes"])]
+#        self.IPC_PROC["pid"] = [mp.Value("d", 0) for i in range(self.param["core"]["max_processes"])]
+        self.IPC_PROC["pid"] = mp.Array("d", [0 for i in range(self.param["core"]["max_processes"])])
         # Temporal period of process.
-        self.IPC_PROC["period"] = [mp.Value("d", 0) for i in range(self.param["core"]["max_processes"])]
+#        self.IPC_PROC["period"] = [mp.Value("d", 0) for i in range(self.param["core"]["max_processes"])]
+        self.IPC_PROC["period"] = mp.Array("d", [0 for i in range(self.param["core"]["max_processes"])])
         # Temporal offset to temporal period of process.
         self.IPC_PROC["period offset"] \
-            = [mp.Value("d", 0) for i in range(self.param["core"]["max_processes"])]
+            = mp.Array("d", [0 for i in range(self.param["core"]["max_processes"])])
         # Pause flag for each process.
         # 0 :: run, 1 :: pause, 2 :: off
-        self.IPC_PROC["pause"] = [mp.Value("d", 0) for i in range(self.param["core"]["max_processes"])]
-        self.IPC_PROC["reset"] = [mp.Value("d", 0) for i in range(self.param["core"]["max_processes"])]
+        self.IPC_PROC["pause"] = mp.Array("d", [0 for i in range(self.param["core"]["max_processes"])])
+        self.IPC_PROC["reset"] = mp.Array("d", [0 for i in range(self.param["core"]["max_processes"])])
         self.IPC_PROC["profiler"] \
             = [mp.Array("d", [0, 0]) for i in range(self.param["core"]["max_processes"])]
         self.IPC_PROC["if viz"] = {}
@@ -242,6 +248,7 @@ class StateStream(object):
                 f.write(format(b.ljust(12) + self.shm.log_lines[idx[i]]) + '\n')
 
         # Create identifier for every item that needs a process.
+        print("Create identifiers for processes ...")
         self.proc_id = {}
         self.proc_name = {}
         self.proc_type = {}
@@ -251,17 +258,50 @@ class StateStream(object):
         for t in ["np", "sp", "plast", "if"]:
             if mn.S2L(t) in self.net:
                 for i,I in self.net[mn.S2L(t)].items():
-                    self.shm.proc_id[i][0] = current_id
-                    self.proc_id[i] = int(current_id)
-                    self.proc_name[int(current_id)] = copy.copy(i)
-                    self.proc_type[i] = t
-                    self.IPC_PROC["period"][current_id].value = I.get("period", 1)
-                    self.IPC_PROC["period offset"][current_id].value = I.get("period offset", 0)
-                    current_id += 1
+                    # In case of SP, determine if this SP really needs its own process.
+                    # I.e., iff SP parameters receive updates.
+                    needs_process = False
+                    if t == "sp":
+                        for p, P in self.net["plasticities"].items():
+                            # par[0]: np or sp
+                            # par[1]: np/sp name
+                            # par[2]: parameter name
+                            for par in P["parameter"]:
+                                if par[0] == "sp":
+                                    if "share params" in self.net["synapse_pools"][par[1]]:
+                                        for spar, SPAR in self.net["synapse_pools"][par[1]]["share params"].items():
+                                            if SPAR[0] == i:
+                                                needs_process = True
+                                    # or if self is this sp.
+                                    elif par[1] == i:
+                                        # Add param only if not shared.
+                                        if "share params" in self.net["synapse_pools"][i]:
+                                            if par[2] not in self.net["synapse_pools"][i]["share params"]:
+                                                needs_process = True
+                                        else:
+                                            needs_process = True
+                    else:
+                        needs_process = True
+
+                    # If needed, prepare process for item.
+                    if needs_process:
+                        self.shm.proc_id[i][0] = current_id
+                        self.proc_id[i] = int(current_id)
+                        self.proc_name[int(current_id)] = copy.copy(i)
+                        self.proc_type[i] = t
+                        self.IPC_PROC["period"][current_id] = I.get("period", 1)
+                        self.IPC_PROC["period offset"][current_id] = I.get("period offset", 0)
+                        self.IPC_PROC["pause"][current_id] = I.get("at start", 0)
+                        current_id += 1
+                    else:
+                        self.shm.proc_id[i][0] = -1
+                        self.proc_id[i] = -1
+
                     # Not needed here, but remember also devices for processes.
                     self.device[i] = I.get("device", "cpu")
                     # Get / set bottleneck factor.
                     self.bottleneck[i] = I.get("bottleneck", -1)
+        print("    ... done creating identifiers for processes.")
 
         # Initialize temporal memory for everything.
         self.tmem_updates = [0 for i in range(len(self.param["core"]["temporal_memory"]))]
@@ -269,31 +309,32 @@ class StateStream(object):
         self.tmem_time_steps = [0 for i in range(len(self.param["core"]["temporal_memory"]))]
 
         # Create instances for processes.
+        print("Create instances for " + str(current_id) + " processes ...")
         self.inst = {}
         for p,p_id in self.proc_id.items():
-            if self.proc_type[p] == "np":
-                self.inst[p] = ProcessNp(p, p_id, self.net, self.param)
-            elif self.proc_type[p] == "sp":
-                self.inst[p] = ProcessSp(p, p_id, self.net, self.param)
-            elif self.proc_type[p] == "plast":
-                self.inst[p] = ProcessPlast(p, p_id, self.net, self.param)
-            elif self.proc_type[p] == "if":
-                I = self.net["interfaces"][p]
-                class_name = "ProcessIf_" + I["type"]
-                ProcIf = getattr(importlib.import_module("statestream.interfaces.process_if_" \
-                                                         + I["type"]), 
-                                 class_name)
-                self.inst[p] = ProcIf(p, p_id, self.net, self.param)
+            if p_id != -1:
+                if self.proc_type[p] == "np":
+                    self.inst[p] = ProcessNp(p, p_id, self.mn, self.param)
+                elif self.proc_type[p] == "sp":
+                    self.inst[p] = ProcessSp(p, p_id, self.mn, self.param)
+                elif self.proc_type[p] == "plast":
+                    self.inst[p] = ProcessPlast(p, p_id, self.mn, self.param)
+                elif self.proc_type[p] == "if":
+                    I = self.net["interfaces"][p]
+                    class_name = "ProcessIf_" + I["type"]
+                    ProcIf = getattr(importlib.import_module("statestream.interfaces.process_if_" \
+                                                             + I["type"]), 
+                                     class_name)
+                    self.inst[p] = ProcIf(p, p_id, self.mn, self.param)
+        print("    ... done creating instances for processes.")
 
         # Instantiate core clients.
         self.cclients = {}
-        self.cclients_active = {}
         if "core_clients" in self.net:
             for cc,CC in self.net["core_clients"].items():
                 CClientConst = getattr(importlib.import_module("examples.core_clients." + CC["type"]), 
                                        "CClient_" + CC["type"])
                 self.cclients[cc] = CClientConst(cc, self.net, self.param, self.shm.session_id, self.IPC_PROC)
-                self.cclients_active[cc] = CC.get("state", False)
 
         # Set initial frame counter to zero.
         self.frame_cntr = 0
@@ -365,19 +406,19 @@ class StateStream(object):
         # Create process, start it and wait for initial handshake.
         self.inst[client_param['name']] = ProcessSysClient(client_param['name'], 
                                                            proc_id, 
-                                                           self.net, 
+                                                           self.mn, 
                                                            self.param,
                                                            client_param)
         self.proc[client_param['name']] = mp.Process(target=self.inst[client_param['name']].run,
                                                      args=(self.IPC_PROC, []))
-        self.IPC_PROC["period"][proc_id].value = 1
-        self.IPC_PROC["period offset"][proc_id].value = 0
+        self.IPC_PROC["period"][proc_id] = 1
+        self.IPC_PROC["period offset"][proc_id] = 0
         self.proc[client_param['name']].start()
-        while self.IPC_PROC["state"][proc_id].value == process_state["I"]:
-            sleep(0.002)
+        while self.IPC_PROC["state"][proc_id] == process_state["I"]:
+            sleep(0.001)
         # Store pid of currently started process.
         self.PIDS[client_param['name']] \
-            = int(self.IPC_PROC["pid"][proc_id].value)
+            = int(self.IPC_PROC["pid"][proc_id])
         # Update PIDs logfile.
         with open(self.home_path + "/.statestream/pid.log", "w+") as f:
             dump_yaml(self.PIDS, f)
@@ -388,7 +429,7 @@ class StateStream(object):
         """
         if client_name in self.proc_id:
             # Send specific terminasion signal to client process.
-            self.IPC_PROC["pid"][self.proc_id[client_name]].value = -1
+            self.IPC_PROC["pid"][self.proc_id[client_name]] = -1
             self.proc[client_name].join()
             for p_id, p_name in self.proc_name.items():
                 if p_name == client_name:
@@ -473,10 +514,13 @@ class StateStream(object):
         # Get and set core pid.
         self.IPC_PROC["core pid"].value = os.getpid()
         # Get instances of processes.
+        print("Start " + str(len(self.proc_id)) + " processes ...")
         self.proc = {}
         for p in self.proc_id:
-            self.proc[p] = mp.Process(target=self.inst[p].run,
-                                      args=(self.IPC_PROC, []))
+            if self.proc_id[p] != -1:
+                self.proc[p] = mp.Process(target=self.inst[p].run,
+                                          args=(self.IPC_PROC, []))
+        print("   ... done starting processes.")
 
         # initialize core profiler with zeros
         self.profiler_core_read = np.zeros([self.param["core"]["profiler_window"],])
@@ -515,20 +559,22 @@ class StateStream(object):
             if pending_procs != 0:
                 pending_procs = 0
                 for p,p_id in self.proc_id.items():
-                    if self.IPC_PROC["state"][p_id].value == process_state["I"]:
-                        self.proc[p].start()
-                        while self.IPC_PROC["state"][p_id].value == process_state["I"]:
-                            sleep(0.002)
-                        # Store pid of currently started process.
-                        self.PIDS[p] \
-                            = (int(self.IPC_PROC["pid"][p_id].value))
-                        pending_procs += 1
-                    elif self.IPC_PROC["state"][p_id].value \
-                            != process_state["WaW"]:
-                        pending_procs += 1
-                    # Write all pids to log file.
-                    with open(self.home_path + "/.statestream/pid.log", "w+") as f:
-                        dump_yaml(self.PIDS, f)
+                    if p_id != -1:
+                        if self.IPC_PROC["state"][p_id] == process_state["I"]:
+                            self.proc[p].start()
+                            while self.IPC_PROC["state"][p_id] == process_state["I"]:
+                                sleep(0.001)
+                            # Store pid of currently started process.
+                            self.PIDS[p] \
+                                = (int(self.IPC_PROC["pid"][p_id]))
+                            # Update pending process counter.
+                            pending_procs += 1
+                        elif self.IPC_PROC["state"][p_id] \
+                                != process_state["WaW"]:
+                            pending_procs += 1
+                        # Write all pids to log file.
+                        with open(self.home_path + "/.statestream/pid.log", "w+") as f:
+                            dump_yaml(self.PIDS, f)
 
             # Start timer for loop cycle.
             timer_start_overall = time()
@@ -536,18 +582,19 @@ class StateStream(object):
             WaR_shared = True
             WaW_shared = True
             for p,p_id in self.proc_id.items():
-                if WaR_shared:
-                    if self.frame_cntr % self.IPC_PROC["period"][p_id].value \
-                            == self.IPC_PROC["period offset"][p_id].value:
-                        if self.IPC_PROC["state"][p_id].value \
-                                != process_state["WaR"]:
-                            WaR_shared = False
-                if WaW_shared:
-                    if self.frame_cntr % int(self.IPC_PROC["period"][p_id].value) \
-                            == self.IPC_PROC["period offset"][p_id].value:
-                        if self.IPC_PROC["state"][p_id].value \
-                                != process_state["WaW"]:
-                            WaW_shared = False
+                if p_id != -1:
+                    if WaR_shared:
+                        if self.frame_cntr % self.IPC_PROC["period"][p_id] \
+                                == self.IPC_PROC["period offset"][p_id]:
+                            if self.IPC_PROC["state"][p_id] \
+                                    != process_state["WaR"]:
+                                WaR_shared = False
+                    if WaW_shared:
+                        if self.frame_cntr % int(self.IPC_PROC["period"][p_id]) \
+                                == self.IPC_PROC["period offset"][p_id]:
+                            if self.IPC_PROC["state"][p_id] \
+                                    != process_state["WaW"]:
+                                WaW_shared = False
 
             # Check if WaR_shared.
             if WaR_shared and self.IPC_PROC["trigger"].value \
@@ -561,7 +608,9 @@ class StateStream(object):
                 self.IPC_PROC["trigger"].value = process_trigger["WaR-W"]
                 # Execute writeout method for all clients.
                 for cc,CC in self.cclients.items():
-                    if self.cclients_active[cc]:
+                    if self.frame_cntr == CC.start_frame:
+                        CC.active = True
+                    if CC.active:
                         CC.writeout()
                 # End timer for write phase.
                 self.profiler_core_write[int(self.frame_cntr) % int(self.param["core"]["profiler_window"])] \
@@ -664,11 +713,11 @@ class StateStream(object):
                                     # Re-init process instance.
                                     self.inst[s] = ProcessSp(s, 
                                                              proc_idx, 
-                                                             self.edited_net, 
+                                                             self.mn, 
                                                              self.param)
                                     self.proc[s] = mp.Process(target=self.inst[s].run,
                                                               args=(self.IPC_PROC, []))
-                                    self.IPC_PROC["state"][proc_idx].value = 0
+                                    self.IPC_PROC["state"][proc_idx] = 0
                             for n, N in self.net["neuron_pools"].items():
                                 if np_needs_rebuild(self.net, self.edited_net, n):
                                     proc_idx = self.proc_id[n]
@@ -677,11 +726,11 @@ class StateStream(object):
                                     # Re-init process instance.
                                     self.inst[n] = ProcessNp(n, 
                                                              proc_idx, 
-                                                             self.edited_net, 
+                                                             self.mn, 
                                                              self.param)
                                     self.proc[n] = mp.Process(target=self.inst[n].run,
                                                               args=(self.IPC_PROC, []))
-                                    self.IPC_PROC["state"][proc_idx].value = 0
+                                    self.IPC_PROC["state"][proc_idx] = 0
                             for p, P in self.net["plasticities"].items():
                                 if plast_needs_rebuild(self.net, self.edited_net, p):
                                     proc_idx = self.proc_id[p]
@@ -690,11 +739,11 @@ class StateStream(object):
                                     # Re-init process instance.
                                     self.inst[p] = ProcessPlast(p, 
                                                                 proc_idx, 
-                                                                self.edited_net, 
+                                                                self.mn, 
                                                                 self.param)
                                     self.proc[p] = mp.Process(target=self.inst[p].run,
                                                               args=(self.IPC_PROC, []))
-                                    self.IPC_PROC["state"][proc_idx].value = 0
+                                    self.IPC_PROC["state"][proc_idx] = 0
                             # Reset trigger.
                             self.IPC_PROC["trigger"].value = trigger
                             # Finally overwrite own net and meta-net.
@@ -722,9 +771,9 @@ class StateStream(object):
                                     if cmd_line[-2].startswith("period"):
                                         # Get / set new period and offset for process.
                                         proc_id = self.proc_id[reset_target]
-                                        self.IPC_PROC["period"][proc_id].value \
+                                        self.IPC_PROC["period"][proc_id] \
                                             = int(cmd_line[-1][:-1].split("#")[0])
-                                        self.IPC_PROC["period offset"][proc_id].value \
+                                        self.IPC_PROC["period offset"][proc_id] \
                                             = int(cmd_line[-1][:-1].split("#")[1])
 
                 # Proceed only if not in break or if in one-step.
@@ -740,23 +789,25 @@ class StateStream(object):
                         # Compute bottleneck (slowest node) duration (read + write).
                         self.bottleneck_dur = 0
                         for p,p_id in self.proc_id.items():
-                            # Only consider items which could be the bottleneck.
-                            if self.bottleneck[p] == -1:
-                                dur = self.IPC_PROC['profiler'][p_id][0] \
-                                      + self.IPC_PROC['profiler'][p_id][1]
-                                if dur > self.bottleneck_dur:
-                                    self.bottleneck_dur = dur
+                            if p_id != -1:
+                                # Only consider items which could be the bottleneck.
+                                if self.bottleneck[p] == -1:
+                                    dur = self.IPC_PROC['profiler'][p_id][0] \
+                                          + self.IPC_PROC['profiler'][p_id][1]
+                                    if dur > self.bottleneck_dur:
+                                        self.bottleneck_dur = dur
                         # Update periods.
                         for p,p_id in self.proc_id.items():
-                            if self.bottleneck[p] > 0 and self.bottleneck_dur > 0:
-                                # Compute item duration.
-                                dur = self.IPC_PROC['profiler'][p_id][0] \
-                                      + self.IPC_PROC['profiler'][p_id][1]
-                                new_period \
-                                    = int(self.IPC_PROC["period"][p_id].value * float(dur) \
-                                        / (self.bottleneck_dur * self.bottleneck[p]))
-                                if new_period > 0:
-                                    self.IPC_PROC["period"][p_id].value = new_period
+                            if p_id != -1:
+                                if self.bottleneck[p] > 0 and self.bottleneck_dur > 0:
+                                    # Compute item duration.
+                                    dur = self.IPC_PROC['profiler'][p_id][0] \
+                                          + self.IPC_PROC['profiler'][p_id][1]
+                                    new_period \
+                                        = int(self.IPC_PROC["period"][p_id] * float(dur) \
+                                            / (self.bottleneck_dur * self.bottleneck[p]))
+                                    if new_period > 0:
+                                        self.IPC_PROC["period"][p_id] = new_period
 
 
                     # Reset one-step.
@@ -821,7 +872,7 @@ class StateStream(object):
                     
                     # Execute before_readin method for all core clients.
                     for cc,CC in self.cclients.items():
-                        if self.cclients_active[cc]:
+                        if CC.active:
                             CC.before_readin()
                     
                     # Set all processes to reading phase.
@@ -829,7 +880,7 @@ class StateStream(object):
     
                     # Execute readin method for all core clients.
                     for cc,CC in self.cclients.items():
-                        if self.cclients_active[cc]:
+                        if CC.active:
                             CC.readin()
 
                     # Update temporal memory.
@@ -967,7 +1018,7 @@ class StateStream(object):
                         self.terminal_current_show = copy.copy(self.terminal_command)
                 elif self.terminal_command.startswith("savegraph"):
                     # Update from shared memory.
-                    raw_net = copy.deepcopy(self.raw_net)
+                    raw_net = copy.deepcopy(self.net)
                     self.shm.update_net(raw_net)
                     # Write original graph parameters to file.
                     if self.terminal_command.split()[1].endswith(".st_graph"):
@@ -978,6 +1029,7 @@ class StateStream(object):
                                     + self.terminal_command.split()[1] \
                                     + ".st_graph"
                     with open(save_file, "w+") as f:
+                        print("Graph written to " + str(save_file) + "\n")
                         dump_yaml(raw_net,
                                   f)
                 elif self.terminal_command.startswith("savenet"):
@@ -1001,7 +1053,7 @@ class StateStream(object):
                         loc_pid = int(self.terminal_command.split()[1])
                         period = int(self.terminal_command.split()[2])
                         if period > 0:
-                            self.IPC_PROC["period"][loc_pid].value = period
+                            self.IPC_PROC["period"][loc_pid] = period
                 elif self.terminal_command.startswith("offset "):
                     # Change offset setting for a process.
                     # Assume first option is the process ID and second the new
@@ -1010,7 +1062,7 @@ class StateStream(object):
                         loc_pid = int(self.terminal_command.split()[1])
                         offset = int(self.terminal_command.split()[2])
                         if period > 0:
-                            self.IPC_PROC["period offset"][loc_pid].value = offset
+                            self.IPC_PROC["period offset"][loc_pid] = offset
                 elif self.terminal_command.startswith("bottleneck "):
                     # Change bottleneck setting for a process.
                     # Assume first option is the process ID and second the new
@@ -1022,7 +1074,7 @@ class StateStream(object):
                         if bn_factor <= 0:
                             # Reset process to be a potential bottleneck.
                             self.bottleneck[proc_name] = -1
-                            self.IPC_PROC["period"][loc_pid].value = 1
+                            self.IPC_PROC["period"][loc_pid] = 1
                         else:
                             self.bottleneck[proc_name] = bn_factor
                 elif self.terminal_command.startswith("split "):
@@ -1033,12 +1085,12 @@ class StateStream(object):
                         self.IPC_PROC['plast split'].value = split
                 elif self.terminal_command.startswith('ccstop'):
                     cc_name = self.terminal_command.split()[1]
-                    if cc_name in self.cclients_active:
-                        self.cclients_active[cc_name] = False
+                    if cc_name in self.cclients:
+                        self.cclients[cc_name].active = False
                 elif self.terminal_command.startswith('ccstart'):
                     cc_name = self.terminal_command.split()[1]
-                    if cc_name in self.cclients_active:
-                        self.cclients_active[cc_name] = True
+                    if cc_name in self.cclients:
+                        self.cclients[cc_name].active = True
                 else:
                     self.terminal_current_show \
                         = "unknown " + self.terminal_command
@@ -1108,9 +1160,10 @@ class StateStream(object):
                         # Sort by duration.
                         durs = []
                         for p,p_id in self.proc_id.items():
-                            durs.append([-self.IPC_PROC['profiler'][p_id][0] \
-                                         - self.IPC_PROC['profiler'][p_id][1], p])
-                            durs[-1][0] *= self.IPC_PROC["period"][p_id].value
+                            if p_id != -1:
+                                durs.append([-self.IPC_PROC['profiler'][p_id][0] \
+                                             - self.IPC_PROC['profiler'][p_id][1], p])
+                                durs[-1][0] *= self.IPC_PROC["period"][p_id]
                         idx = sorted((e[0], e[1]) for i,e in enumerate(durs))
                         for i,p_dur_name in enumerate(idx):
                             if i >= lines:
@@ -1124,19 +1177,21 @@ class StateStream(object):
                             print("    " + str(p_id).ljust(4) \
                                   + str(p).ljust(18) \
                                   + self.proc_type[p].ljust(8) \
-                                  + str(int(self.IPC_PROC["state"][p_id].value)).ljust(8) \
+                                  + str(int(self.IPC_PROC["state"][p_id])).ljust(8) \
                                   + self.device[p].ljust(8) \
                                   + str(int(1000 * prof[0])).ljust(8) \
                                   + str(int(1000 * prof[1])).ljust(8) \
-                                  + str(int(self.IPC_PROC["period"][p_id].value)).ljust(8) \
-                                  + str(int(self.IPC_PROC["period offset"][p_id].value)).ljust(8))
+                                  + str(int(self.IPC_PROC["period"][p_id])).ljust(8) \
+                                  + str(int(self.IPC_PROC["period offset"][p_id])).ljust(8))
                         print("")
                     elif self.terminal_current_show == "state":
                         print("\n")
                         print("session id:".rjust(16) + "   " \
                               + str(self.shm.session_id))
-                        print("split:".rjust(16) + "   " \
-                              + str(int(self.IPC_PROC['plast split'].value)))
+                        print("agents / split:".rjust(16) + "   " \
+                              + str(self.net["agents"]) + " / " + str(int(self.IPC_PROC['plast split'].value)))
+                        print("NPs / SPs:".rjust(16) + "   " \
+                              + str(len(self.net["neuron_pools"])) + " / " + str(len(self.net["synapse_pools"])))
                         if self.IPC_PROC["break"].value == 0:
                             print("state:".rjust(16) + "   streaming")
                         else:
@@ -1166,9 +1221,9 @@ class StateStream(object):
                     elif self.terminal_current_show == "ccs":
                         print("\n\n    core-clients: " \
                               + str(len(self.net.get("core_clients", {}))))
-                        for c,C in self.net.get("core_clients", {}).items():
-                            print("        " + c.ljust(16) + " of type " \
-                                  + str(C["type"]) + "  (active: " + str(self.cclients_active[c]) + ")")
+                        for cc,CC in self.cclients.items():
+                            print("        " + cc.ljust(16) + " of type " \
+                                  + str(CC.p["type"]) + "  (active: " + str(CC.active) + ")\n")
                     elif self.terminal_current_show.startswith('ccmsg'):
                         cc_name = self.terminal_current_show.split()[1]
                         print("\n    messages of core-client " + cc_name)
@@ -1253,7 +1308,7 @@ class StateStream(object):
                 = time() - timer_start_overall
 
             if not WaR_shared and not WaW_shared:
-                sleep(0.002)
+                sleep(0.001)
 
             # Sleep cummulated for delay.
             if self.IPC_PROC["delay"].value != 0 and not self.delayed:
