@@ -27,8 +27,8 @@ from statestream.backends.backends import import_backend
 
 
 class ProcessPlast(STProcess):
-    def __init__(self, name, ident, net, param):
-        STProcess.__init__(self, name, ident, net, param)
+    def __init__(self, name, ident, metanet, param):
+        STProcess.__init__(self, name, ident, metanet, param)
         # Get / set type.
         self.type = self.p["type"]
 
@@ -96,11 +96,23 @@ class ProcessPlast(STProcess):
         self.plasticity = Plasticity(self.name, self.net, self.param, self.mn, self.nps, self.sps)
 
 
+        # First initialization of plasticity parameters (mostly from optimizer).
+#        for i, i_l in self.plasticity.dat_layout["parameter"].items():
+#            if i_l.type == "backend":
+#                if is_scalar_shape(i_l.shape):
+#                    value = self.plasticity.p.get(i, 0.0)
+#                    self.B.set_value(self.plasticity.dat["parameter"][i], value)
+#        split = np.ones([self.net['agents'],], dtype=np.float32)
+#        if self.IPC_PROC['plast split'].value > 0:
+#            split[0:int(self.IPC_PROC['plast split'].value)] = 0.0
+#        self.B.set_value(self.plasticity.split,
+#                         split)
+
 
     def update_frame_readin(self):
         """Plasticity dependent read update.
         """
-        if self.IPC_PROC["pause"][self.id].value == 0 and self.frame_cntr % self.IPC_PROC["period"][self.id].value == self.IPC_PROC["period offset"][self.id].value:
+        if self.IPC_PROC["pause"][self.id] == 0 and self.frame_cntr % self.IPC_PROC["period"][self.id] == self.IPC_PROC["period offset"][self.id]:
             # Read necessary np states / parameters.
             for n in self.plasticity.nps:
                 self.B.set_value(self.plasticity.nps[n].state[0],
@@ -114,7 +126,7 @@ class ProcessPlast(STProcess):
                                          self.shm.dat[n]["parameter"][par])
             # Read necessary sp parameters.
             for s in self.plasticity.sps:
-                if self.IPC_PROC["pause"][self.shm.proc_id[s][0]].value == 0:
+                if self.IPC_PROC["pause"][self.shm.proc_id[s][0]] == 0:
                     for par in self.shm.dat[s]["parameter"]:
                         # Check for parameter sharing.
                         source_sp = s
@@ -158,7 +170,7 @@ class ProcessPlast(STProcess):
         """Plasticity dependent write update.
         """
         # Only execute plasticity if not in pause and if period/offset is met.
-        if self.IPC_PROC["pause"][self.id].value == 0 and self.frame_cntr % self.IPC_PROC["period"][self.id].value == self.IPC_PROC["period offset"][self.id].value:
+        if self.IPC_PROC["pause"][self.id] == 0 and self.frame_cntr % self.IPC_PROC["period"][self.id] == self.IPC_PROC["period offset"][self.id]:
             if self.plasticity.startframe < self.frame_cntr:
                 # Note: after this the params contain only their updates.
                 self.plasticity.update_parameter()
