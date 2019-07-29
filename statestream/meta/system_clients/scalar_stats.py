@@ -100,6 +100,13 @@ def get_parameter(net, children):
         "max": 2048,
         "default": 8
     })
+    parameter.append({
+        "name": "pattern",
+        "type": "string",
+        "min": None,
+        "max": None,
+        "default": ""
+    })
     if len(children) > 1:
         parameter.append({
             "name": "off X",
@@ -446,5 +453,6 @@ class scalar_stats(object):
         pp_lines.append("       nodes: " + str(self.parameter["nodes"]))
         pp_lines.append("      window: " + str(self.parameter["window"]))
         pp_lines.append("        stat: " + str(self.parameter["stat"]))
+#        pp_lines.append("     pattern: " + str(self.parameter["pattern"]))
         return pp_lines
     
