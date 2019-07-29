@@ -24,9 +24,9 @@ from statestream.utils.helper import is_scalar_shape
 
 
 class ProcessSp(STProcess):
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         # Initialize process wrapper.
-        STProcess.__init__(self, name, ident, net, param)
+        STProcess.__init__(self, name, ident, metanet, param)
 
     def initialize(self):
         """Initialization of process for synapse-pool.
