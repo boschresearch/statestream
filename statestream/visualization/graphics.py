@@ -139,6 +139,8 @@ def blit_plot(surf,
               ccol, 
               color=None,
               y_var=None, 
+              X=0,
+              Y=0,
               number_color=DEFAULT_COLORS["orange"],
               legend=None,
               scale='combined',
@@ -147,7 +149,7 @@ def blit_plot(surf,
     """Blits a curve plot onto a pygame surface.
     """
     # Check some constraints.
-    if sw_size[0] < 120 or sw_size[1] < 120 or x.shape[0] != y.shape[0]:
+    if sw_size[0] < 32 or sw_size[1] < 32 or x.shape[0] != y.shape[0]:
         pass
     else:
         zX = 0
@@ -156,12 +158,12 @@ def blit_plot(surf,
             zX = 18
             zY = sw_size[1] - 18
             # Blit x/y axes.
-            pg.draw.line(surf, cc(DEFAULT_COLORS["light"], ccol), (zX, 0), (zX, sw_size[1] - 1), 2)
-            pg.draw.line(surf, cc(DEFAULT_COLORS["light"], ccol), (0, zY), (sw_size[0] - 1, zY), 2)
+            pg.draw.line(surf, cc(DEFAULT_COLORS["light"], ccol), (X + zX, Y + 0), (X + zX, Y + sw_size[1] - 1), 2)
+            pg.draw.line(surf, cc(DEFAULT_COLORS["light"], ccol), (X + 0, Y + zY), (X + sw_size[0] - 1, Y + zY), 2)
         # Blit frame.
         if frame > 0:
             pg.draw.rect(surf, cc((196,196,196), ccol), 
-                         [0, 0, sw_size[0], sw_size[1]], 
+                         [X, Y, sw_size[0], sw_size[1]], 
                          int(frame))
         # Points are distributed equally over the x axis (even if not true).
         points = x.shape[0]
@@ -202,15 +204,15 @@ def blit_plot(surf,
                     col = (0,255,0)
                 pg.draw.line(surf, 
                              cc(col, ccol), 
-                             (int(zX + dx / 2), int(zY / 2)), 
-                             (int(sw_size[0] - dx / 2), int(zY / 2)), 
+                             (int(X + zX + dx / 2), int(Y + zY / 2)), 
+                             (int(X + sw_size[0] - dx / 2), int(Y + zY / 2)), 
                              2)
             else:
                 # Create and draw point list.
                 point_list = []
                 for pts in range(points):
-                    point_list.append([int(zX + dx / 2 + pts * dx), 
-                                       int(zY * (1.0 - (y[pts,p] - yMin[p]) / max(yMax[p] - yMin[p], 1e-6)))])
+                    point_list.append([int(X + zX + dx / 2 + pts * dx), 
+                                       int(Y + zY * (1.0 - (y[pts,p] - yMin[p]) / max(yMax[p] - yMin[p], 1e-6)))])
                 if color is not None:
                     col = color[p]
                 else:
@@ -220,9 +222,9 @@ def blit_plot(surf,
                     for pts in range(points):
                         pg.draw.line(surf, cc(col, ccol),  
                                      [point_list[pts][0], 
-                                      int(zY * (1.0 - (y[pts,p] + y_var[pts,p] - yMin[p]) / max(yMax[p] - yMin[p], 1e-6)))],
+                                      int(Y + zY * (1.0 - (y[pts,p] + y_var[pts,p] - yMin[p]) / max(yMax[p] - yMin[p], 1e-6)))],
                                      [point_list[pts][0], 
-                                      int(zY * (1.0 - (y[pts,p] - y_var[pts,p] - yMin[p]) / max(yMax[p] - yMin[p], 1e-6)))], 
+                                      int(Y + zY * (1.0 - (y[pts,p] - y_var[pts,p] - yMin[p]) / max(yMax[p] - yMin[p], 1e-6)))], 
                                      2)
                 pg.draw.lines(surf, cc(col, ccol), False, point_list, 2)
             # blit x-axis time steps
@@ -237,34 +239,40 @@ def blit_plot(surf,
                         col = (0,255,0)
                     surf.blit(font.render(legend[p],
                                           1,
-                                          cc(col, ccol)), (sw_size[0] - 60, p * dy))
+                                          cc(col, ccol)), (X + sw_size[0] - 60, Y + p * dy))
         # Blit current value.
         if y.shape[1] == 1:
             if y.shape[1] == 1:
                 surf.blit(font.render(num2str(y[points - 1,0]), 
                                       1, 
-                                      cc(number_color, ccol)), (sw_size[0] - 80, int(zY / 2)))
+                                      cc(number_color, ccol)), (X + sw_size[0] - 80, int(Y + zY / 2)))
 
 # =============================================================================
 # =============================================================================
 # =============================================================================
 
-def blit_pcp(surf, font, sw_size, x, ccol, number_color=DEFAULT_COLORS["orange"], dim=0, color=None):
+def blit_pcp(surf, font, sw_size, x, ccol, number_color=DEFAULT_COLORS["orange"], dim=0, X=0, Y=0, color=None):
     """Blits tensor x to surf using parallel coordinates.
     """
+    if len(x.shape) == 1:
+        x_tmp = np.expand_dims(x, axis=1)
+    else:
+        x_tmp = x
     if dim == 0:
-        X = x.reshape([x.shape[0], np.prod(x.shape[1:])])
+        x_tmp = x_tmp.reshape([x_tmp.shape[0], np.prod(x_tmp.shape[1:])])
     elif dim == 1:
-        X = np.swapaxes(x, 0, 1)
-        X = X.reshape([X.shape[0], np.prod(X.shape[1:])])
-    X = np.transpose(X)
-    Y = np.arange(0, X.shape[0], 1, dtype=np.int64)
+        x_tmp = np.swapaxes(x_tmp, 0, 1)
+        x_tmp = x_tmp.reshape([x_tmp.shape[0], np.prod(x_tmp.shape[1:])])
+    x_tmp = np.transpose(x_tmp)
+    y_tmp = np.arange(0, x_tmp.shape[0], 1, dtype=np.int64)
     blit_plot(surf, 
               font, 
               sw_size, 
-              Y, 
-              X, 
+              y_tmp, 
+              x_tmp, 
               ccol,
+              X=X,
+              Y=Y,
               color=color,
               axes=False,
               frame=2)
