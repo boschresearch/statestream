@@ -121,12 +121,13 @@ class Plasticity(object):
                     value = 0.0
                 else:
                     value = np.zeros(i_l.shape, dtype=i_l.dtype)
-                self.B.set_value(self.dat[t][i], value)
+                self.B.set_value(self.dat["variables"][i], value)
 
         # Instantiate split parameter.
         self.split = self.B.variable(np.zeros([self.net['agents'],], dtype=np.float32),
                                      borrow=True,
                                      name=name + '.' + 'split')
+
         # Define function for sp/np parameter update (e.g. optimization).
         self.update_parameter = lambda: None
 
