@@ -26,9 +26,9 @@ from statestream.backends.backends import import_backend
 
 
 class ProcessNp(STProcess):
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         # Initialize process wrapper.
-        STProcess.__init__(self, name, ident, net, param)
+        STProcess.__init__(self, name, ident, metanet, param)
 
 
 
@@ -145,7 +145,7 @@ class ProcessNp(STProcess):
                 self.IPC_PROC["break"].value = 1
 
         # If not in pause mode, read.
-        if self.IPC_PROC["pause"][self.id].value == 0 and self.frame_cntr % self.IPC_PROC["period"][self.id].value == self.IPC_PROC["period offset"][self.id].value:
+        if self.IPC_PROC["pause"][self.id] == 0 and self.frame_cntr % self.IPC_PROC["period"][self.id] == self.IPC_PROC["period offset"][self.id]:
             # Read input from incomming interfaces.
             self.prior_state_flag = False
             self.prior_state_value = None
@@ -178,7 +178,7 @@ class ProcessNp(STProcess):
                                              self.shm.dat[n]["parameter"][par])
             # Read necessary (all in-comming) sp parameters.
             for s in self.sps:
-                if self.IPC_PROC["pause"][self.shm.proc_id[s][0]].value == 0:
+                if self.IPC_PROC["pause"][self.shm.proc_id[s][0]] == 0:
                     for par in self.shm.dat[s]["parameter"]:
                         # Check for parameter sharing.
                         source_sp = s
@@ -214,8 +214,8 @@ class ProcessNp(STProcess):
             self.shm.set_shm([self.name, "parameter", par[3]], new_value)
 
         # If not in pause mode, write.
-        if self.IPC_PROC["pause"][self.id].value == 0 \
-                and self.frame_cntr % self.IPC_PROC["period"][self.id].value == self.IPC_PROC["period offset"][self.id].value:
+        if self.IPC_PROC["pause"][self.id] == 0 \
+                and self.frame_cntr % self.IPC_PROC["period"][self.id] == self.IPC_PROC["period offset"][self.id]:
             # Compute np one-step update.
 #            try:
 #                self.update_np_state()
@@ -245,7 +245,7 @@ class ProcessNp(STProcess):
                     print("variable: " + str(var))
                     print("    IPC: " + str(self.shm.layout[self.name]["variables"][var].shape))
                     print("    T  : " + str(self.B.get_value(self.nps[self.name].dat["variables"][var]).shape))
-        elif self.IPC_PROC["pause"][self.id].value == 2:
+        elif self.IPC_PROC["pause"][self.id] == 2:
             # Real "off" flag for np, only write zero state.
             self.shm.dat[self.name]["state"].fill(0)
 
