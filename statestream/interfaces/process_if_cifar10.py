@@ -211,9 +211,9 @@ class ProcessIf_cifar10(ProcessIf):
         cf10_label : np.array, shape [agents, 10, 1, 1]
             The one-hot encoded ground-truth label for the current image.
     """
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         # Initialize parent ProcessIf class.
-        ProcessIf.__init__(self, name, ident, net, param)
+        ProcessIf.__init__(self, name, ident, metanet, param)
 
 
 
