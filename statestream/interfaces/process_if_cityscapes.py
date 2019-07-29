@@ -236,9 +236,9 @@ class ProcessIf_cityscapes(ProcessIf):
         cs_mask : np.array, shape [agents, 1, dim_x, dim_y]
             The one-hot encoded class label for the ignore / mask class.
     """ 
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         # Initialize parent ProcessIf class
-        ProcessIf.__init__(self, name, ident, net, param)
+        ProcessIf.__init__(self, name, ident, metanet, param)
 
 
     def initialize(self):
