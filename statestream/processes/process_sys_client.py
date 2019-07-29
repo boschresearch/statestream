@@ -36,8 +36,8 @@ class ProcessSysClient(STProcess):
     They may however not write parameters from other processes (e.g. nps)
     due to interference with plasts that might write to them.
     """
-    def __init__(self, name, ident, net, param, client_param):
-        STProcess.__init__(self, name, ident, net, param)
+    def __init__(self, name, ident, metanet, param, client_param):
+        STProcess.__init__(self, name, ident, metanet, param)
         self.type = client_param['type']
         # For system clients we also have to set the client dict.
         self.p = copy.copy(client_param)
@@ -78,8 +78,8 @@ class ProcessSysClient(STProcess):
     def update_frame_readin(self):
         """System client dependent read update.
         """
-        if int(self.IPC_PROC["pause"][self.id].value) == 0 \
-                and int(self.frame_cntr) % int(self.IPC_PROC["period"][self.id].value) == int(self.IPC_PROC["period offset"][self.id].value):
+        if int(self.IPC_PROC["pause"][self.id]) == 0 \
+                and int(self.frame_cntr) % int(self.IPC_PROC["period"][self.id]) == int(self.IPC_PROC["period offset"][self.id]):
             # Read system client's parameters.
             for p,P in self.p['parameter'].items():
                 self.sys_client.dat['parameter'][p] = np.copy(self.shm.dat[self.p['name']]['parameter'][p])
@@ -97,7 +97,7 @@ class ProcessSysClient(STProcess):
                             self.nps[n].dat["parameter"][par].set_value(self.shm.dat[n]["parameter"][par])
             # Read necessary (all in-comming) sp parameters.
             for s in self.sps:
-                if self.IPC_PROC["pause"][self.shm.proc_id[s][0]].value == 0:
+                if self.IPC_PROC["pause"][self.shm.proc_id[s][0]] == 0:
                     for par in self.shm.dat[s]["parameter"]:
                         # Check for parameter sharing.
                         source_sp = s
@@ -126,8 +126,8 @@ class ProcessSysClient(STProcess):
         """System client dependent write update.
         """
         # Only execute client if not in pause and if period/offset is met.
-        if self.IPC_PROC["pause"][self.id].value == 0 and \
-                self.frame_cntr % self.IPC_PROC["period"][self.id].value == self.IPC_PROC["period offset"][self.id].value:
+        if self.IPC_PROC["pause"][self.id] == 0 and \
+                self.frame_cntr % self.IPC_PROC["period"][self.id] == self.IPC_PROC["period offset"][self.id]:
             # Execute write phase.
             self.sys_client.update_frame_writeout()
             # Write variables.
