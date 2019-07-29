@@ -225,9 +225,9 @@ class ProcessIf_mnist(ProcessIf):
             The one-hot encoded ground-truth label for the current image. Spatial
             dimensions will be taken from the associated neuron-pool.
     """ 
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         # Initialize parent ProcessIf class
-        ProcessIf.__init__(self, name, ident, net, param)
+        ProcessIf.__init__(self, name, ident, metanet, param)
 
 
 
