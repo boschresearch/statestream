@@ -79,11 +79,18 @@ def sp_shm_layout(name, net, param):
     dtype = eval(param["core"]["dtype_default"])
     # Begin with empty layout.
     shm_layout = {}
-    
+
+
     # Add layout for all parameter
     # -------------------------------------------------------------------------
     shm_layout["parameter"] = {}
+    shm_layout["variables"] = {}
     p = net["synapse_pools"][name]
+
+    # Check, if SP is a mere functional SP (no parameters or variables).
+    if "func" in p:
+      return shm_layout
+
     # Set noise parameters.
     if "noise" in p:
         if p["noise"] == "normal":
@@ -145,6 +152,38 @@ def sp_shm_layout(name, net, param):
     rf_size = sp_get_dict(p, "rf", 0)
     # Get preprocessing projection dimensions.
     ppp_dims = sp_get_dict(p, "ppp", 0)
+    # Get final transformation M.
+    # ------------------------------------------------------------------------
+    M = p.get("M", [])
+    M_features = 0
+    if M:
+      M_name = "M"
+      # Get unshare flag for all inputs.
+      unshared = False
+      M_preshape = []
+      min_M = p.get("min " + M_name, None)
+      max_M = p.get("max " + M_name, None)
+      # Check for unshared sp parameters.
+      if "unshare" in p:
+          if M_name in p["unshare"]:
+              unshared = True
+              M_preshape = [net["agents"]]
+      target_features = tnp_shape[1] * avgout * maxout
+      # Get number hidden features and receptive field size.
+      M_features = M[0]
+      M_rf = M[1]
+      # Parameterize ShmL.
+      shm_layout["parameter"][M_name] \
+          = ShmL("backend",
+                 M_preshape + [target_features,
+                 M_features,
+                 M_rf,
+                 M_rf],
+                 dtype,
+                 "xavier",
+                 minimum=min_M,
+                 maximum=max_M)
+    # ------------------------------------------------------------------------
     # Loop over all factors.
     for f in range(no_factors):
         # Add weights for each factor / input.
@@ -171,7 +210,10 @@ def sp_shm_layout(name, net, param):
                     P_preshape = [net["agents"]]
             # Determine number of target features from target shapes.
             if target_shapes[f][i] in ["full", "feature"]:
-                target_features = tnp_shape[1] * avgout * maxout
+                if M:
+                  target_features = M_features
+                else:
+                  target_features = tnp_shape[1] * avgout * maxout
             elif target_shapes[f][i] in ["scalar", "spatial"]:
                 target_features = 1
             # Proceed dependent on given rf size.
@@ -313,16 +355,20 @@ def sp_shm_layout(name, net, param):
 
         # For each factor add a bias parameter.
         if bias_shapes is not None:
+            if M:
+              target_features = M_features
+            else:
+              target_features = tnp_shape[1]
             if bias_shapes[f] == "full":
                 shm_layout["parameter"]["b_" + str(f)] \
                     = ShmL("backend", 
-                           [tnp_shape[1], tnp_shape[2], tnp_shape[3]], 
+                           [target_features, tnp_shape[2], tnp_shape[3]], 
                            dtype, 
                            0.0)
             elif bias_shapes[f] == "feature":
                 shm_layout["parameter"]["b_" + str(f)] \
                     = ShmL("backend", 
-                           [tnp_shape[1],], 
+                           [target_features,], 
                            dtype, 
                            0.0)
             elif bias_shapes[f] == "spatial":
@@ -338,9 +384,6 @@ def sp_shm_layout(name, net, param):
                            dtype,
                            0.0)
 
-    # Add layout for all variables
-    # -------------------------------------------------------------------------
-    shm_layout["variables"] = {}
 
     # Return layout for synapse pool.
     return shm_layout
@@ -387,7 +430,7 @@ def sp_init(net, name, dat_name, dat_layout, mode=None):
             init_as = mode
             
         # Dependent on init_as initialize.
-        if dat_name[0] in ["W", "P"]:
+        if dat_name[0] in ["W", "P", "M"]:
             if isinstance(init_as, str):
                 if init_as == "xavier":
                     # Compute fan_in / fan_out and weight bounds.
