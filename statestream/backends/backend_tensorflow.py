@@ -79,10 +79,17 @@ _FUNCTIONS = ["variable",
               "elu",
               "square",
               "msquare",
+              "step",
+			  "rectangular",
+			  "bilinear",
               "sigmoid",
               "gaussian",
               "log",
               "neglog",
+              "softround",
+              "linround",
+              "linroundpow2",
+              "linroundint",
               "concatenated",
               "reshape",
               "repeat",
@@ -286,16 +293,16 @@ def spiky(x, threshold=1.0, saturation=2.0):
     """Spiky function.
 
     Simple spiking activation function assuming a self identity recurrence.
-    x < 0:                          0
-    0 < x < threshold:              x
-    threshold < x < saturation:     saturation + eps
-    saturation <= x:                0
+    x < 0:                              0
+    0 < x < threshold:                  x
+    threshold < x < saturation:         2 * saturation + eps
+    saturation <= x:                    0
 
 
     """
     _x = tf.where(x < 0, 0.0 * x, x)
     _y = tf.where(_x >= saturation, 0.0 * _x, _x)
-    return tf.where(_y > threshold, 0.0 * _y + saturation + 1e-8, _y)
+    return tf.where(_y > threshold, 0.0 * _y + 2.0 * saturation + 1e-8, _y)
 
 def switchsign(x, threshold=1.0):
     """Switch sign function.
@@ -351,7 +358,31 @@ def elu(x, alpha=1.0):
         return tf.nn.elu(x)
     else:
         return tf.where(x > 0, tf.nn.elu(x), alpha * tf.nn.elu(x))
+
+def step(x, at=0.0, left=-1.0, right=1.0):
+    """The step function.
+
+    IF x < at THEN x = left ELSE x = right
+    """
+    return left + (right - left) * (tf.sign(x - at + 1e-8) + 1.0) / 2.0
+
+def rectangular(x, x_min=0, x_max=1, y_level=0, y_height=1):
+    """The rectangular function.
     
+    Returns y_height inside (x_min, x_max), and y_level otherwise.
+    """
+    is_in_interval = tf.cast(tf.logical_and(tf.greater(x, x_min), tf.less(x, x_max)), tf.float32)
+    return y_level + (y_height - y_level) * is_in_interval
+
+def bilinear(x, peak_loc=0, peak_width=1, peak_val=1, level=0):
+    """Bilinear base function.
+    
+    Returns level outside of (peak_loc - peak_width, peak_loc + peak_width) and
+    inside a bilinear function from level to peak_val (at peak_loc) and back to level.
+    """
+    peak_slope = (peak_val - level) / peak_width
+    return tf.clip_by_value(peak_val - tf.abs(peak_loc - x) * peak_slope, level, peak_val)
+
 def sigmoid(x):
     """Sigmoid function: a(x) = 1 / (1 + exp(-x))
     """
@@ -388,8 +419,75 @@ def softround(x, p=2):
 
     return y
 
+def linround(x, s=0.5, b=0.5):
+    """Linear rounding (activation) function.
 
+    Rounds |R to 0 and 1. With piecewise linear function.
+    s and b must be in (0, 1):
+      s :: slope of first and third piece (1/s of second)
+           s = 0 : normal rounding
+           s = 1 : identity
+      b :: border value for rounding
+    """
+    condition_first = tf.less(x, b / (s + 1))
+    condition_second = tf.greater(x, (s + b) / (s + 1))
+    linear_1 = x * s  
+    linear_2 = x / s + b * (1 - 1 / s) 
+    linear_3 = x * s + 1 - s
+    
+    return tf.where(condition_first,
+                    linear_1,
+                    tf.where(condition_second, linear_3, linear_2))
 
+def linroundpow2(x, s=0.5, b=0.5, n=1):
+    """Similar to linroundint but rounds to powers of 2 until 2^(n - 1).
+
+    Rounds to the values [0, 1, 2, 4, ..., 2^(n-1)].
+
+    n = 1 :: same as linround
+    """
+    cond_below = []
+    cond_above = []
+    for i in range(n):
+        cond_below.append(tf.less(x, 2**i))
+        cond_above.append(tf.greater(x, 2**i))
+
+    # Below 1 => same as linround below 1.
+    x = tf.where(cond_below[0], linround(x, s, b), x)
+    # Check the n-1 intervalls (1,2) (2,4) (4,8) ... (2^(n-2), 2^(n-1))
+    # For n=1, this should be empty.
+    for i in range(n - 1):
+        c = 2**i
+        x = tf.where(cond_above[i], 
+                     tf.where(cond_below[i + 1], 
+                              c + c * linround((x - c) / c, s, b),
+                              x),
+                     x)
+    # Above 2**(n-1) => same as linround above 1.
+    c = 2**(n - 2)
+    return tf.where(cond_above[-1], c + c * linround((x - c) / c, s, b), x)
+
+def linroundint(x, s=0.5, b=0.5):
+    """Linear rounding (activation) function to nearest integer.
+
+    Rounds |R to |N. With piecewise linear function.
+    s and b must be in (0, 1):
+      s :: slope of first and third piece (1/s of second)
+           s = 0 : normal rounding
+           s = 1 : identity
+      b :: border value for rounding
+    """
+    x_char = tf.floor(x)
+    x_mant = x - x_char
+    condition_first = tf.less(x_mant, b / (s + 1))
+    condition_second = tf.greater(x_mant, (s + b) / (s + 1))
+    linear_1 = x_mant * s  
+    linear_2 = x_mant / s + b * (1 - 1 / s) 
+    linear_3 = x_mant * s + 1 - s
+    
+    return x_char + tf.where(condition_first,
+                             linear_1,
+                             tf.where(condition_second, linear_3, linear_2))
 
 def concatenate(states, axis=-1):
     if axis < 0:
