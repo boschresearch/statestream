@@ -75,6 +75,11 @@ from statestream.backends.backends import import_backend
         "weight_fnc"    [[str, .., str],    This is the weight function for every W_i_j.
                         ...
                          [str, .., str]]    
+        "M"             [hidden_f, rf]      This is an additional / optional linear 
+                                            transformation (dense rf=1, conv rf>1) at the
+                                            very end of the synapse pool. This transform-ation
+                                            can change the feature, but not the spatial
+                                            dimension.
     
     Case source = [[string]]:
         Case downsampling (or no sampling):
@@ -173,6 +178,18 @@ class SynapsePool(object):
 
         # Initialize sp parameter dependent on type.
         # ---------------------------------------------------------------------
+        self.func = self.p.get("func", None)
+        if self.func:
+            # Replace 'B.' with 'self.B.' and check for doubles.
+            for fnc in self.B._FUNCTIONS:
+                self.func = self.func.replace("B." + fnc, "self.B." + fnc)
+            while self.func.find("self.self.") != -1:
+                self.func = self.func.replace("self.self.", "self.")
+            # Replace placeholders $ij.
+            for s1,S1 in enumerate(self.p["source"]):
+                for s2,S2 in enumerate(S1):
+                    ph = "self.source_np[" + str(s1) + "][" + str(s2) + "].state[-1]"
+                    self.func = self.func.replace("$" + str(s1) + str(s2), ph)
         # Determine number of factors.
         self.no_factors = len(self.p["source"])
         # Get / set overall activation function.
@@ -182,6 +199,8 @@ class SynapsePool(object):
         # Get / set pre-activation function.
         self.pact = self.p.get("pact", [["Id" for i in range(len(self.p["source"][f]))] \
                                             for f in range(len(self.p["source"]))])
+        # Get / set final transformation M.
+        self.M = self.p.get("M", [])
         # Get / set noise.
         self.noise = self.p.get("noise", None)
         if self.noise != None:
@@ -218,6 +237,7 @@ class SynapsePool(object):
         self.W_unshare = []
         self.P_unshare = []
         self.b_unshare = []
+        self.M_unshare = False
         for f in range(self.no_factors):
             self.W_unshare.append([])
             self.P_unshare.append([])
@@ -226,6 +246,8 @@ class SynapsePool(object):
                 self.W_unshare[-1].append(False)
                 self.P_unshare[-1].append(False)
         if "unshare" in self.p:
+            if "M" in self.p["unshare"]:
+                self.M_unshare = True
             for f in range(self.no_factors):
                 if "b_" + str(f) in self.p["unshare"]:
                     self.b_unshare[f] = True
@@ -253,32 +275,33 @@ class SynapsePool(object):
         self.rf_size = []
         self.pad = []
         self.pooling = []
-        for f in range(self.no_factors):
-            self.rf_size.append([])
-            self.pad.append([])
-            self.pooling.append([])
-            for i in range(len(self.p["source"][f])):
-                par_name = "W_" + str(f) + "_" + str(i)
-                if self.W_unshare[f][i]:
-                    self.rf_size[-1].append([self.dat_layout["parameter"][par_name].shape[3], 
-                                             self.dat_layout["parameter"][par_name].shape[4]])
-                    self.pad[-1].append([self.dat_layout["parameter"][par_name].shape[3] // 2, 
-                                         self.dat_layout["parameter"][par_name].shape[4] // 2])
-                else:                    
-                    self.rf_size[-1].append([self.dat_layout["parameter"][par_name].shape[2], 
-                                             self.dat_layout["parameter"][par_name].shape[3]])
-                    self.pad[-1].append([self.dat_layout["parameter"][par_name].shape[2] // 2, 
-                                         self.dat_layout["parameter"][par_name].shape[3] // 2])
-                # Determine pooling for each input.
-                self.pooling[-1].append(0)
-                if self.rf_size[-1][-1][0] != self.source_np[f][i].shape[2]:
-                    if self.source_np[f][i].shape[2] == self.target_np.shape[2]:
-                        self.pooling[-1][-1] = 1
-                    elif self.source_np[f][i].shape[2] > self.target_np.shape[2]:
-                        self.pooling[-1][-1] = int(self.source_np[f][i].shape[2] / self.target_np.shape[2])
-                    elif self.target_np.shape[2] > self.source_np[f][i].shape[2]:
-                        self.pooling[-1][-1] = -int(self.target_np.shape[2] / self.source_np[f][i].shape[2])
-        #print("\n" + self.name + " rf: " + str(self.rf_size) + " pool: " + str(self.pooling))
+        if not self.func:
+            for f in range(self.no_factors):
+                self.rf_size.append([])
+                self.pad.append([])
+                self.pooling.append([])
+                for i in range(len(self.p["source"][f])):
+                    par_name = "W_" + str(f) + "_" + str(i)
+                    if self.W_unshare[f][i]:
+                        self.rf_size[-1].append([self.dat_layout["parameter"][par_name].shape[3], 
+                                                 self.dat_layout["parameter"][par_name].shape[4]])
+                        self.pad[-1].append([self.dat_layout["parameter"][par_name].shape[3] // 2, 
+                                             self.dat_layout["parameter"][par_name].shape[4] // 2])
+                    else:                    
+                        self.rf_size[-1].append([self.dat_layout["parameter"][par_name].shape[2], 
+                                                 self.dat_layout["parameter"][par_name].shape[3]])
+                        self.pad[-1].append([self.dat_layout["parameter"][par_name].shape[2] // 2, 
+                                             self.dat_layout["parameter"][par_name].shape[3] // 2])
+                    # Determine pooling for each input.
+                    self.pooling[-1].append(0)
+                    if self.rf_size[-1][-1][0] != self.source_np[f][i].shape[2]:
+                        if self.source_np[f][i].shape[2] == self.target_np.shape[2]:
+                            self.pooling[-1][-1] = 1
+                        elif self.source_np[f][i].shape[2] > self.target_np.shape[2]:
+                            self.pooling[-1][-1] = int(self.source_np[f][i].shape[2] / self.target_np.shape[2])
+                        elif self.target_np.shape[2] > self.source_np[f][i].shape[2]:
+                            self.pooling[-1][-1] = -int(self.target_np.shape[2] / self.source_np[f][i].shape[2])
+            #print("\n" + self.name + " rf: " + str(self.rf_size) + " pool: " + str(self.pooling))
             
         # Initialize post synaptics with empty.
         self.post_synaptic = []
@@ -306,12 +329,14 @@ class SynapsePool(object):
         _activation = copy.copy(activation)
         for fnc in self.B._FUNCTIONS:
             _activation = _activation.replace("B." + fnc, "self.B." + fnc)
+        while _activation.find("self.self.") != -1:
+            _activation = _activation.replace("self.self.", "self.")
         # Insert state variable.
         if _activation.find('$') != -1:
             try:
                 _activation = _activation.replace('$', placeholder)
             except:
-                print("\nError: Unable to evaluate activation function: " + str(activation))
+                print("\nError: Unable to evaluate activation function: " + str(activation) + "  placeholder: " + str(placeholder))
         else:
             _activation = "self.B." + _activation + "(" + placeholder + ")"
 
@@ -351,8 +376,13 @@ class SynapsePool(object):
                         self.source_np_state[f].append(self.source_np[f][i].state[-1])
             # Determine number of features in target np.
             tgt_shape = np_state_shape(self.net, self.p["target"])
-            # Handle transformer exception.
-            if "tags" in self.p:
+            if self.M:
+                tgt_shape[1] = self.M[0]
+            # Handle functional and transformer exception.
+            if self.func:
+                self.post_synaptic.append(eval(self.func))
+                return
+            elif "tags" in self.p:
                 if "TRANSFORMER" in self.p["tags"]:
                     src_shape = np_state_shape(self.net, self.p["source"][0][0])
                     if len(self.source_np) == 2:
@@ -809,11 +839,11 @@ class SynapsePool(object):
                     if self.factor_shapes[f] == "full":
                         scaled_conv = scaled_conv * _SCALED_CONV_SUM[f]
                     elif self.factor_shapes[f] == "feature":
-                        scaled_conv = scaled_conv * _SCALED_CONV_SUM[f][:,:,0,0].dimshuffle(0,1,"x","x")
+                        scaled_conv = scaled_conv * self.B.dimshuffle(_SCALED_CONV_SUM[f][:,:,0,0], (0,1,"x","x"))
                     elif self.factor_shapes[f] == "spatial":
-                        scaled_conv = scaled_conv * _SCALED_CONV_SUM[f][:,0,:,:].dimshuffle(0,"x",1,2)
+                        scaled_conv = scaled_conv * self.B.dimshuffle(_SCALED_CONV_SUM[f][:,0,:,:], (0,"x",1,2))
                     elif self.factor_shapes[f] == "scalar":
-                        scaled_conv = scaled_conv * _SCALED_CONV_SUM[f][:,0,0,0].dimshuffle(0,"x","x","x")
+                        scaled_conv = scaled_conv * self.B.dimshuffle(_SCALED_CONV_SUM[f][:,0,0,0], (0,"x","x","x"))
 
             # Apply avgout.
             if self.avgout == 1:
@@ -838,6 +868,14 @@ class SynapsePool(object):
                         scaled_conv_maxout = t
                     else:
                         scaled_conv_maxout = self.B.maximum(scaled_conv_maxout, t)
+
+            # Apply final transformation M.
+            if self.M:
+                scaled_conv_maxout = self.B.conv2d(scaled_conv_maxout,
+                                                   self.dat["parameter"]["M"],
+                                                   border_mode="half",
+                                                   subsample=(1, 1))
+
 
             # Apply sp activation.
             if self.ACT != "Id":
