@@ -101,7 +101,10 @@ class NeuronPool(object):
         # Get / set noise.
         self.noise = self.p.get("noise", None)
         if self.noise is not None:
-            self.noise_dist = self.B.randomstream(np.random.RandomState(42).randint(99999), self.noise)
+            if self.noise == "Bernoulli":
+                self.noise_dist = self.B.randomstream(np.random.RandomState(42).randint(99999), "binomial")
+            else:
+                self.noise_dist = self.B.randomstream(np.random.RandomState(42).randint(99999), self.noise)
         # Get np dropout (stochastic activation).
         self.dropout = self.p.get("dropout", None)
         if self.dropout is not None:
@@ -188,6 +191,9 @@ class NeuronPool(object):
                     self.state_SUM[-1] += (self.dat["parameter"]["noise_max"] - self.dat["parameter"]["noise_min"]) \
                                           * self.noise_dist(self.shape) \
                                           + self.dat["parameter"]["noise_min"]
+                elif self.noise == "Bernoulli":
+                    self.state_SUM[-1] += self.noise_dist(self.shape, p=self.dat["parameter"]["noise_prob"]) \
+                    #self.state_SPA[-1] = self.state_SPA[-1] * self.B.cast(mask, self.B._DTYPE)
 
                 # Apply batch normalization for mean.
                 if self.batchnorm_mean:
@@ -339,6 +345,8 @@ class NeuronPool(object):
                 # First, replace all functions with the local backend.
                 for fnc in self.B._FUNCTIONS:
                     self.activation = self.activation.replace("B." + fnc, "self.B." + fnc)
+                while self.activation.find("self.self.") != -1:
+                    self.activation = self.activation.replace("self.self.", "self.")
                 # Insert state variable.
                 if self.activation.find('$') != -1:
                     try:
@@ -361,7 +369,7 @@ class NeuronPool(object):
                 # Apply dropout.
                 if self.dropout is not None:
                     # Get mask for dropout.
-                    mask = self.dropout_srng(self.shape, 1, 1 - self.dat["parameter"]["dropout"])
+                    mask = self.dropout_srng(self.shape, p=self.dat["parameter"]["dropout"])
                     
                     self.state_SPA[-1] = self.state_SPA[-1] * self.B.cast(mask, self.B._DTYPE)
 
