@@ -26,7 +26,7 @@ from statestream.utils.properties import array_property
 # =============================================================================
 
 class scalar_stats(object):
-    """Provide scalar statistics for set of items all of type np or sp.
+    """Provide scalar statistics for set of items all of same type.
 
     For a (selected) subset of items (= children) which share a same data type, 
     e.g. all neuron-pools have states, or plasticities having a loss variable,
@@ -61,6 +61,7 @@ class scalar_stats(object):
         self.stats = np.zeros([len(self.sv)], dtype=np.float32)
         self.stats_hist = np.zeros(self.shape, dtype=np.float32)
         self.current_frame = 0
+        self.pattern = None
         
 
 
@@ -76,6 +77,7 @@ class scalar_stats(object):
                 self.sv_dat[C] = {}
             if V == "np state":
                 self.sv_dat[C][V] = np.zeros(shm.dat[C]["state"].shape)
+                self.pattern = "[0,:,:,:]"
             for s in ['np par ', 'sp par ', 'plast par ', 'if par']:
                 if V.startswith(s):
                     par = V[len(s):]
@@ -114,7 +116,12 @@ class scalar_stats(object):
         for v in range(len(self.sv)):
             C = self.sv[v][0]
             V = self.sv[v][1]
-            self.stats[v] = array_property(self.sv_dat[C][V], self.parameter["stat"])
+            if self.pattern:
+                self.stats[v] = array_property(eval("self.sv_dat[C][V]" + self.pattern), 
+                                               self.parameter["stat"])
+            else:
+                self.stats[v] = array_property(self.sv_dat[C][V], 
+                                               self.parameter["stat"])
         # Write current statistics to window and compute mean for full window.
         self.current_frame = (self.current_frame + 1) % (self.parameter["nodes"] * self.parameter["window"])
         self.window[self.current_frame % self.parameter["window"],:] \
