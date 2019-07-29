@@ -46,12 +46,12 @@ class ProcessIf(object):
     param : dict
         Dictionary of core parameters.
     """
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         # Initialize process.
         self.name = name
         self.id = ident
         self.param = param
-        self.mn = MetaNetwork(net)
+        self.mn = copy.deepcopy(metanet)
         self.net = copy.deepcopy(self.mn.net)
         self.p = self.net["interfaces"][name]
         self.state = process_state["I"]
@@ -83,6 +83,7 @@ class ProcessIf(object):
                         self.dat[t][i] = np.array([1,], dtype=i_l.dtype)
                     else:
                         self.dat[t][i] = np.zeros(i_l.shape, dtype=i_l.dtype)
+
         # Set internal state.
         self.state = process_state["I"]
         # Flag for color correction (blue).
@@ -202,9 +203,11 @@ class ProcessIf(object):
             Dictionary of process save shared memory for synchronization.
         """
         # Get set if pid.
-        IPC_PROC["pid"][self.id].value = os.getpid()
+        IPC_PROC["pid"][self.id] = os.getpid()
         # Initially set state.
-        IPC_PROC["state"][self.id].value = self.state
+        IPC_PROC["state"][self.id] = self.state
+        # Create local references to IPC.
+        self.IPC_PROC = IPC_PROC
 
         # Get shared memory.
         self.shm = SharedMemory(self.net, 
@@ -237,7 +240,7 @@ class ProcessIf(object):
 
         # Set eigen state.
         self.state = process_state["WaW"]
-        IPC_PROC["state"][self.id].value = self.state
+        IPC_PROC["state"][self.id] = self.state
 
         # Start forever.
         while self.state != process_state["E"]:
@@ -294,37 +297,39 @@ class ProcessIf(object):
                 # Read split parameter.
                 self.split = int(IPC_PROC["plast split"].value)
 
+
                 # Handle interface visualization.
-                if self.screen is None:
-                    if IPC_PROC["if viz"][self.name].value == 1:
-                        # Import and initialize pygame here.
-                        from statestream.utils.pygame_import import pg, pggfx
-                        self.screen = pg.display.set_mode((self.screen_width,
-                                                           self.screen_height), 
-                                                           pg.SRCALPHA,
-                                                           32)
-                        # Set initialization flag.
-                        self.viz_init = False
-                        self.local_viz_init = False
-                if self.screen is not None:
-                    if IPC_PROC["if viz"][self.name].value == 0:
-                        # Quit viz.
+                if self.dat["parameter"].get("viz_sync", 1) == 1:
+                    if self.screen is None:
+                        if IPC_PROC["if viz"][self.name].value == 1:
+                            # Import and initialize pygame here.
+                            from statestream.utils.pygame_import import pg, pggfx
+                            self.screen = pg.display.set_mode((self.screen_width,
+                                                               self.screen_height), 
+                                                               pg.SRCALPHA,
+                                                               32)
+                            # Set initialization flag.
+                            self.viz_init = False
+                            self.local_viz_init = False
+                    if self.screen is not None:
+                        if IPC_PROC["if viz"][self.name].value == 0:
+                            # Quit viz.
+                            pg.display.quit()
+                            # Reset screen.
+                            self.screen = None
+                            # reset viz close flag
+                            self.viz_close = False
+                        else:
+                            self.viz()
+                    if self.viz_close and self.screen is not None:
+                        # Quit interface visualization.
                         pg.display.quit()
-                        # Reset screen.
+                        # Reset screen flag.
                         self.screen = None
-                        # reset viz close flag
+                        # Reset viz close flag.
                         self.viz_close = False
-                    else:
-                        self.viz()
-                if self.viz_close and self.screen is not None:
-                    # Quit interface visualization.
-                    pg.display.quit()
-                    # Reset screen flag.
-                    self.screen = None
-                    # Reset viz close flag.
-                    self.viz_close = False
-                    # Reset IPC flag.
-                    IPC_PROC["if viz"][self.name].value = 0
+                        # Reset IPC flag.
+                        IPC_PROC["if viz"][self.name].value = 0
 
                 # Update the current frame.
                 self.update_frame_readin()
@@ -369,8 +374,43 @@ class ProcessIf(object):
                 # Cleanup.
                 pass
 
+
+            # Handle interface visualization.
+            if self.dat["parameter"].get("viz_sync", 1) == 0:
+                if self.screen is None:
+                    if IPC_PROC["if viz"][self.name].value == 1:
+                        # Import and initialize pygame here.
+                        from statestream.utils.pygame_import import pg, pggfx
+                        self.screen = pg.display.set_mode((self.screen_width,
+                                                           self.screen_height), 
+                                                           pg.SRCALPHA,
+                                                           32)
+                        # Set initialization flag.
+                        self.viz_init = False
+                        self.local_viz_init = False
+                if self.screen is not None:
+                    if IPC_PROC["if viz"][self.name].value == 0:
+                        # Quit viz.
+                        pg.display.quit()
+                        # Reset screen.
+                        self.screen = None
+                        # reset viz close flag
+                        self.viz_close = False
+                    else:
+                        self.viz()
+                if self.viz_close and self.screen is not None:
+                    # Quit interface visualization.
+                    pg.display.quit()
+                    # Reset screen flag.
+                    self.screen = None
+                    # Reset viz close flag.
+                    self.viz_close = False
+                    # Reset IPC flag.
+                    IPC_PROC["if viz"][self.name].value = 0
+
+
             # Update ipc state.
-            IPC_PROC["state"][self.id].value = self.state
+            IPC_PROC["state"][self.id] = self.state
 
         # Call interface dependent quit function.
         self.quit()
