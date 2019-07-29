@@ -35,14 +35,14 @@ from statestream.meta.network import S2L
 
 
 class STProcess(object):
-    def __init__(self, name, ident, net, param):
+    def __init__(self, name, ident, metanet, param):
         """Process wrapper, managing shared memory and syncronization.
         """
         # Initialize process.
         self.name = name
         self.id = ident
         self.param = param
-        self.mn = MetaNetwork(net)
+        self.mn = copy.deepcopy(metanet)
         self.net = copy.deepcopy(self.mn.net)
         # Get and set process type.
         self.item_type = None
@@ -89,11 +89,11 @@ class STProcess(object):
         """Central method of STProcess holding forever loop.
         """
         # Get and set process pid.
-        IPC_PROC["pid"][self.id].value = os.getpid()
+        IPC_PROC["pid"][self.id] = os.getpid()
         # Initially set state.
         # This also releases the core from its block after calling run.
         self.state = process_state["C"]
-        IPC_PROC["state"][self.id].value = self.state
+        IPC_PROC["state"][self.id] = self.state
         # Create local references to IPC.
         self.IPC_PROC = IPC_PROC
 
@@ -111,16 +111,19 @@ class STProcess(object):
         # Set eigen state to wait after write, and hence always begin with
         # reading.
         self.state = process_state["WaW"]
-        IPC_PROC["state"][self.id].value = self.state
+        IPC_PROC["state"][self.id] = self.state
+
+        # Flag for very first readin.
+        red_once = False
 
         # Enter forever loop.
         while self.state != process_state["E"]:
             # Update state dependent on trigger.
             trigger = IPC_PROC["trigger"].value
             if trigger == process_trigger["-E"] \
-                    or IPC_PROC["pid"][self.id].value == -1:
+                    or IPC_PROC["pid"][self.id] == -1:
                 self.state = process_state["E"]
-                IPC_PROC["state"][self.id].value = self.state
+                IPC_PROC["state"][self.id] = self.state
                 break
             elif trigger == process_trigger["WaW-R"] \
                     and self.state == process_state["WaW"]:
@@ -176,12 +179,14 @@ class STProcess(object):
                       % int(self.param["core"]["profiler_window"])
                 self.profiler["read"][idx] \
                     = time.time() - timer_start
+                red_once = True
             elif self.state == process_state["W"]:
                 # Start timer of write phase.
                 timer_start = time.time()
 
                 # Process dependent write actions.
-                self.update_frame_writeout()
+                if red_once:
+                    self.update_frame_writeout()
                 
                 self.state = process_state["WaW"]
                 # End timing of write phase.
@@ -195,18 +200,18 @@ class STProcess(object):
                 IPC_PROC["profiler"][self.id][1] \
                     = np.mean(self.profiler["write"])
             elif self.state == process_state["WaR"]:
-                time.sleep(0.002)
+                time.sleep(0.001)
             elif self.state == process_state["WaW"]:
                 # Check for np reset and reset state / pars 
                 # in IPC and vars in theano.
-                if IPC_PROC["reset"][self.id].value == 1:
+                if IPC_PROC["reset"][self.id] == 1:
                     # reset state
                     self.shm.dat[self.name]["state"].fill(0)
                     # TODO: re-init all parameter
                     # TODO: write nice function to init all parameter or specified
-                time.sleep(0.002)
+                time.sleep(0.001)
             elif self.state == process_state["E"]:
                 pass
 
             # Update ipc state.
-            IPC_PROC["state"][self.id].value = self.state
+            IPC_PROC["state"][self.id] = self.state
